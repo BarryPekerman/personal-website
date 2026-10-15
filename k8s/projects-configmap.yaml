@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portfolio-projects
+  namespace: public-sessions
+data:
+  project1.md: |
+    # 🚀 Kubernetes Portfolio Terminal
+    
+    **Repository**: https://github.com/[your-username]/portfolio-terminal
+    **Status**: Active Development
+    **Technologies**: Kubernetes, Go, WebSockets, Docker, Alpine Linux
+    
+    ## 📋 Project Description
+    An interactive terminal-based portfolio that demonstrates advanced DevOps 
+    and Platform Engineering skills. Each visitor gets their own isolated 
+    Kubernetes pod with a real Linux environment.
+    
+    ## 🎯 Key Features
+    - **Real Isolation**: Each session runs in its own Kubernetes pod
+    - **Security First**: Network policies, resource limits, RBAC
+    - **Self-Destruct**: Security monitoring with automatic termination
+    - **WebSocket Streaming**: Real-time terminal interaction
+    - **Professional Content**: CV, projects, and contact info
+    
+    ## 🛠️ Technical Implementation
+    - **Backend**: Go with client-go for Kubernetes API interaction
+    - **Frontend**: xterm.js for terminal emulation
+    - **Infrastructure**: K3s cluster with custom Alpine images
+    - **Security**: Pod Security Standards, NetworkPolicies, ResourceQuotas
+    - **Deployment**: GitOps with ArgoCD, Docker multi-stage builds
+    
+    ## 🏆 Why This Matters
+    This project showcases the ability to:
+    - Design secure multi-tenant platforms
+    - Implement Kubernetes-native applications
+    - Handle real-time streaming and WebSocket communication
+    - Apply security best practices in container environments
+    - Build professional, user-facing technical demonstrations
+    
+    ## 🔗 Links
+    - **Live Demo**: [Your deployment URL]
+    - **Source Code**: https://github.com/[your-username]/portfolio-terminal
+    - **Documentation**: Comprehensive README with deployment instructions
+
+  project2.md: |
+    # ☁️ Multi-Cloud Infrastructure Platform
+    
+    **Repository**: https://github.com/[your-username]/multi-cloud-platform
+    **Status**: Production
+    **Technologies**: Terraform, Kubernetes, AWS, GCP, Azure
+    
+    ## 📋 Project Description
+    A unified infrastructure platform that manages resources across multiple 
+    cloud providers using Infrastructure as Code principles and GitOps workflows.
+    
+    ## 🎯 Key Features
+    - **Multi-Cloud Support**: AWS, GCP, Azure resource management
+    - **GitOps Workflow**: Automated deployments via ArgoCD
+    - **Cost Optimization**: Automated resource scaling and cleanup
+    - **Compliance**: Built-in security scanning and policy enforcement
+    - **Monitoring**: Centralized observability across all environments
+    
+    ## 🛠️ Technical Stack
+    - **IaC**: Terraform with custom modules and remote state
+    - **Orchestration**: Kubernetes with Helm charts
+    - **CI/CD**: GitHub Actions with multi-stage pipelines
+    - **Monitoring**: Prometheus, Grafana, Jaeger tracing
+    - **Security**: Falco, OPA Gatekeeper, Vault integration
+    
+    ## 📊 Impact
+    - **40% cost reduction** through automated optimization
+    - **99.9% uptime** across all managed services
+    - **50+ microservices** successfully migrated and managed
+    - **Zero security incidents** in production environments
+    
+    ## 🔗 Links
+    - **Architecture Docs**: [Documentation URL]
+    - **Source Code**: https://github.com/[your-username]/multi-cloud-platform
+
+  project3.md: |
+    # 🔒 Zero-Trust Security Platform
+    
+    **Repository**: https://github.com/[your-username]/zero-trust-platform
+    **Status**: Enterprise Production
+    **Technologies**: Istio, Vault, OPA, Kubernetes, Go
+    
+    ## 📋 Project Description
+    A comprehensive zero-trust security platform built on Kubernetes, 
+    implementing micro-segmentation, policy-as-code, and automated 
+    threat detection and response.
+    
+    ## 🎯 Key Features
+    - **Micro-segmentation**: Istio service mesh with mTLS everywhere
+    - **Policy as Code**: Open Policy Agent for automated compliance
+    - **Secret Management**: HashiCorp Vault with dynamic credentials
+    - **Threat Detection**: Real-time anomaly detection and response
+    - **Audit Trail**: Comprehensive logging and compliance reporting
+    
+    ## 🛠️ Technical Implementation
+    - **Service Mesh**: Istio with custom security policies
+    - **Identity**: SPIFFE/SPIRE for workload identity
+    - **Secrets**: Vault with Kubernetes auth and CSI driver
+    - **Policies**: OPA Gatekeeper with custom constraint templates
+    - **Monitoring**: Falco + ELK stack for security events
+    
+    ## 📈 Results
+    - **100% encrypted** inter-service communication
+    - **Automated compliance** with SOC2 and ISO27001
+    - **Mean time to detection** reduced from hours to minutes
+    - **Zero lateral movement** incidents post-implementation
+    
+    ## 🏆 Recognition
+    - **Security Excellence Award** at [Company Name]
+    - **Featured** in Kubernetes Security Best Practices guide
+    - **Open Source Contribution** to OPA Gatekeeper project
+    
+    ## 🔗 Links
+    - **Case Study**: [Publication URL]
+    - **Source Code**: https://github.com/[your-username]/zero-trust-platform
+    - **Presentation**: [Conference talk URL]
+
+

@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portfolio-content
+  namespace: public-sessions
+data:
+  cv.txt: |
+    [Your Name]
+    Senior Software Engineer
+
+    SUMMARY
+    =======
+    Experienced software engineer with expertise in distributed systems,
+    cloud infrastructure, and secure application development. Passionate
+    about building scalable, reliable systems that solve real-world problems.
+
+    SKILLS
+    ======
+    - Programming Languages: Go, Python, JavaScript, Rust
+    - Cloud Platforms: AWS, GCP, Kubernetes
+    - Infrastructure: Docker, Terraform, Ansible
+    - Databases: PostgreSQL, Redis, MongoDB
+    - Security: OAuth, JWT, encryption, secure coding practices
+
+    EXPERIENCE
+    ==========
+    Senior Software Engineer | Tech Company | 2022-Present
+    - Designed and implemented microservices architecture serving 1M+ users
+    - Led migration to Kubernetes, reducing deployment time by 80%
+    - Implemented security best practices across the platform
+
+    Software Engineer | Startup Inc | 2020-2022
+    - Built real-time data processing pipelines
+    - Developed RESTful APIs with 99.9% uptime
+    - Collaborated with cross-functional teams in agile environment
+
+    EDUCATION
+    =========
+    Master of Science in Computer Science
+    University Name | 2018-2020
+
+    contact_info.md: |
+    # Contact Information
+
+    ## Professional Profiles
+    - **LinkedIn**: linkedin.com/in/your-profile
+    - **GitHub**: github.com/your-username
+    - **Email**: your.email@example.com
+
+    ## Location
+    San Francisco, CA
+
+    ## Availability
+    Open to opportunities in distributed systems and cloud infrastructure.
+
+  projects/project1.md: |
+    # Project 1: Distributed Task Scheduler
+
+    A high-performance task scheduling system built with Go and Redis.
+
+    ## Technologies Used
+    - Go 1.21
+    - Redis Cluster
+    - gRPC
+    - Docker & Kubernetes
+
+    ## Key Features
+    - Fault-tolerant distributed execution
+    - Real-time monitoring dashboard
+    - Horizontal scaling support
+    - RESTful API for job management
+
+    ## GitHub Repository
+    https://github.com/your-username/task-scheduler
+
+  projects/project2.md: |
+    # Project 2: Secure API Gateway
+
+    Enterprise-grade API gateway with advanced security features.
+
+    ## Technologies Used
+    - Rust
+    - Tokio async runtime
+    - JWT authentication
+    - Rate limiting with Redis
+
+    ## Key Features
+    - OAuth 2.0 / OpenID Connect support
+    - Request/response transformation
+    - Circuit breaker pattern
+    - Comprehensive logging and metrics
+
+    ## GitHub Repository
+    https://github.com/your-username/api-gateway
+
+  projects/project3.md: |
+    # Project 3: Infrastructure as Code Platform
+
+    Terraform-based platform for managing cloud infrastructure.
+
+    ## Technologies Used
+    - Terraform 1.5+
+    - AWS CDK
+    - GitHub Actions CI/CD
+    - ArgoCD for GitOps
+
+    ## Key Features
+    - Multi-cloud support (AWS, GCP, Azure)
+    - Automated testing and validation
+    - Cost optimization recommendations
+    - Compliance as code
+
+    ## GitHub Repository
+    https://github.com/your-username/iac-platform

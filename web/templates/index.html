@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            height: 100%;
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #terminal {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* Help popup */
+        #help-popup {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        
+        #help-popup:hover {
+            background: rgba(0, 50, 100, 0.9);
+            border-color: #0066cc;
+        }
+        
+        #help-content {
+            display: none;
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            max-width: 300px;
+            font-size: 11px;
+            line-height: 1.4;
+            z-index: 1001;
+        }
+        
+        #help-content.show {
+            display: block;
+        }
+        
+        .help-section {
+            margin-bottom: 10px;
+        }
+        
+        .help-title {
+            color: #0066cc;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .help-command {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .help-desc {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <!-- Help popup button -->
+    <div id="help-popup" onclick="toggleHelp()">
+        ❓ Help
+    </div>
+    
+    <!-- Help content -->
+    <div id="help-content">
+        <div class="help-section">
+            <div class="help-title">📋 NAVIGATION</div>
+            <div><span class="help-command">cv</span> or <span class="help-command">resume</span> - <span class="help-desc">View CV</span></div>
+            <div><span class="help-command">contact</span> - <span class="help-desc">Contact information</span></div>
+            <div><span class="help-command">projects</span> - <span class="help-desc">List projects</span></div>
+            <div><span class="help-command">help</span> - <span class="help-desc">Detailed help</span></div>
+            <div><span class="help-command">clear</span> - <span class="help-desc">Clear screen</span></div>
+        </div>
+        
+        <div class="help-section">
+            <div class="help-title">⚠️ SECURITY</div>
+            <div class="help-desc">Try dangerous commands like <span class="help-command">sudo rm /</span> to trigger security features!</div>
+        </div>
+        
+        <div class="help-section">
+            <div class="help-title">💡 TIPS</div>
+            <div class="help-desc">• Type commands and press ENTER</div>
+            <div class="help-desc">• Use backspace to edit</div>
+            <div class="help-desc">• Full-screen terminal experience</div>
+        </div>
+    </div>
+
+    <!-- Full-screen terminal -->
+    <div id="terminal"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
+    
+    <script>
+        function toggleHelp() {
+            const helpContent = document.getElementById('help-content');
+            helpContent.classList.toggle('show');
+        }
+        
+        // Close help when clicking outside
+        document.addEventListener('click', function(event) {
+            const helpPopup = document.getElementById('help-popup');
+            const helpContent = document.getElementById('help-content');
+            
+            if (!helpPopup.contains(event.target) && !helpContent.contains(event.target)) {
+                helpContent.classList.remove('show');
+            }
+        });
+    </script>
+    
+    <!-- Cache-busting: add timestamp to force reload -->
+    <script src="/static/js/terminal.js?v=20251213"></script>
+</body>
+</html>

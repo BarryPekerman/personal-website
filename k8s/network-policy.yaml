@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: portfolio-terminal-isolation
+  namespace: public-sessions
+spec:
+  podSelector:
+    matchLabels:
+      app: portfolio-terminal
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from the portfolio-backend pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: portfolio-backend
+    ports:
+    - protocol: TCP
+      port: 80
+  egress: []
+  # Deny all egress traffic - terminal pods cannot access the internet or other services
