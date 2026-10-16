@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - dupl
+    - errorlint
+    - gosec
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+    - unparam
+
+formatters:
+  enable:
+    - gofmt

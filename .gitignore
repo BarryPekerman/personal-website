@@ -1,3 +1,4 @@
 # Build artifacts
-*.tar.gz
+/portfolio
 /portfolio-server
+*.tar.gz

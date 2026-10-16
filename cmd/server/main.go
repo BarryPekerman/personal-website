@@ -1,16 +1,17 @@
+// Command server serves the portfolio terminal website.
 package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"portfolio/content"
 	terminalHandlers "portfolio/internal/handlers"
 	"portfolio/internal/k8s"
 	"portfolio/internal/shell"
@@ -19,69 +20,60 @@ import (
 func main() {
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.JSONFormatter{})
-	logger.SetLevel(logrus.DebugLevel) // Enable debug to see filter logs
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logger.SetLevel(logrus.DebugLevel)
+	}
 
+	// APP_MODE picks the shell backend:
+	//   virtual (default) - built-in simulated shell, nothing runs on the host
+	//   local             - real bash on this machine; development only, never expose it
+	//   k8s               - real shell in a throwaway pod per visitor (work in progress)
 	var shellManager shell.Manager
-
-	// Determine mode from environment variable
 	appMode := os.Getenv("APP_MODE")
-	if appMode == "local" {
-		logger.Info("Starting in LOCAL mode (using Docker/Bash)")
-		
-		// Get content path from environment or use default
+	switch appMode {
+	case "", "virtual":
+		appMode = "virtual"
+		shellManager = shell.NewVirtualManager(content.FS, logger)
+	case "local":
 		contentPath := os.Getenv("CONTENT_PATH")
 		if contentPath == "" {
 			contentPath = "./content"
 		}
-		
+		logger.Warn("LOCAL mode runs a real shell on this host - development only, never expose it")
 		shellManager = shell.NewLocalManager(logger, contentPath)
-		logger.WithField("content_path", contentPath).Info("Local mode initialized")
-	} else {
-		logger.Info("Starting in KUBERNETES mode")
-		
-		// Create Kubernetes client
-		k8sClient, err := k8s.NewClient()
+	case "k8s":
+		k8sClient, err := k8s.NewClient(logger)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create Kubernetes client")
 		}
-		
 		shellManager = shell.NewK8sManager(k8sClient, logger)
-		logger.Info("Kubernetes mode initialized")
+	default:
+		logger.WithField("mode", appMode).Fatal("Unknown APP_MODE (use virtual, local or k8s)")
 	}
 
-	r := mux.NewRouter()
-
-	// Serve static files
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-
-	// Serve index.html for the root path
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/templates/index.html")
 	})
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /ws", terminalHandlers.NewTerminalHandler(shellManager, logger).HandleWebSocket)
 
-	// WebSocket handler - works with both local and K8s modes via interface
-	terminalHandler := terminalHandlers.NewTerminalHandler(shellManager, logger)
-	r.HandleFunc("/ws", terminalHandler.HandleWebSocket)
-
-	// Apply CORS middleware
-	corsHandler := handlers.CORS(
-		handlers.AllowedOrigins([]string{"*"}), // Allow all origins for development
-		handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-	)(r)
-
+	addr := ":8080"
+	if port := os.Getenv("PORT"); port != "" {
+		addr = ":" + port
+	}
 	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: corsHandler,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		modeText := "Kubernetes"
-		if appMode == "local" {
-			modeText = "Local"
-		}
-		logger.WithField("mode", modeText).Info("Starting portfolio terminal server on :8080")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.WithFields(logrus.Fields{"mode": appMode, "addr": addr}).Info("Starting portfolio terminal server")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.WithError(err).Fatal("Failed to start server")
 		}
 	}()

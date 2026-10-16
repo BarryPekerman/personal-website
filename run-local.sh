@@ -1,15 +1,9 @@
 #!/bin/bash
-# Run the portfolio terminal server in local mode
+# Run the portfolio terminal locally. APP_MODE defaults to the safe virtual
+# shell; APP_MODE=local gives a real shell on this machine (never expose it).
+set -euo pipefail
+cd "$(dirname "$0")"
 
-export APP_MODE=local
-export CONTENT_PATH=./content
-
-echo "Starting portfolio terminal server in LOCAL mode..."
-echo "Content path: $CONTENT_PATH"
-echo "Open http://localhost:8080 in your browser"
-echo ""
-
-go run cmd/server/main.go
-
-
-
+export APP_MODE="${APP_MODE:-virtual}"
+echo "Starting in ${APP_MODE} mode on http://localhost:${PORT:-8080}"
+go run ./cmd/server

@@ -1,84 +1,34 @@
-[Your Name Here]
-Senior Software Engineer & Cloud Infrastructure Specialist
+BARRY PEKERMAN
+Junior DevOps Engineer · Israel
+github.com/BarryPekerman
 
-═══════════════════════════════════════════════════════════════════════════════
+[DRAFT - review every line before publishing]
 
-PROFESSIONAL SUMMARY
-═══════════════════════════════════════════════════════════════════════════════
+SUMMARY
+-------
+DevOps bootcamp graduate (Infinity Labs, Haifa) and AWS Certified Solutions
+Architect - Associate. I build and run my own infrastructure: Kubernetes
+clusters, Terraform modules and GitOps pipelines, on AWS and Oracle Cloud.
 
-Innovative software engineer with 5+ years of experience in distributed systems,
-cloud-native architectures, and secure application development. Expertise in
-Kubernetes, Go, and infrastructure automation. Passionate about building
-scalable, resilient systems that solve complex business challenges.
+CERTIFICATIONS
+--------------
+- AWS Certified Solutions Architect - Associate
+- In progress: LFCS, CKA
 
-TECHNICAL SKILLS
-═══════════════════════════════════════════════════════════════════════════════
-
-Languages:         Go, Python, JavaScript/TypeScript, Rust, Java
-Cloud Platforms:   AWS (EKS, ECS, Lambda), GCP (GKE), Azure (AKS)
-Infrastructure:    Kubernetes, Docker, Terraform, Helm, ArgoCD
-Databases:         PostgreSQL, Redis, MongoDB, Elasticsearch
-Security:          OAuth2/OIDC, JWT, mTLS, network policies, RBAC
-DevOps/CI/CD:      GitHub Actions, Jenkins, GitLab CI, Flux
-Monitoring:        Prometheus, Grafana, ELK Stack, Jaeger
-
-PROFESSIONAL EXPERIENCE
-═══════════════════════════════════════════════════════════════════════════════
-
-Senior Software Engineer | TechCorp Inc. | San Francisco, CA | 2022-Present
-───────────────────────────────────────────────────────────────────────────────
-• Architected and implemented a multi-tenant Kubernetes platform serving 100K+
-  active users with 99.99% uptime
-• Led migration from monolithic architecture to microservices, reducing deployment
-  time by 85% and improving scalability
-• Designed and implemented security-first infrastructure with zero-trust networking,
-  comprehensive RBAC, and automated compliance checks
-• Built real-time monitoring and alerting systems using Prometheus and Grafana
-• Mentored junior engineers and established development best practices
-
-Software Engineer | StartupXYZ | Remote | 2020-2022
-───────────────────────────────────────────────────────────────────────────────
-• Developed high-throughput data processing pipelines handling 10TB+ daily
-• Implemented RESTful APIs and GraphQL services with comprehensive testing
-• Containerized legacy applications and orchestrated deployments with Kubernetes
-• Integrated CI/CD pipelines reducing release cycles from weeks to hours
-• Collaborated with cross-functional teams in agile environment
-
-DevOps Engineer | Enterprise Solutions | New York, NY | 2019-2020
-───────────────────────────────────────────────────────────────────────────────
-• Managed AWS infrastructure for mission-critical applications
-• Automated deployment processes using Terraform and Ansible
-• Implemented monitoring and logging solutions with ELK stack
-• Reduced infrastructure costs by 40% through optimization and right-sizing
+SKILLS
+------
+Cloud:          AWS, Oracle Cloud (OCI/OKE)
+Containers:     Docker, Kubernetes (kubeadm, k3s, EKS, OKE), Helm, ArgoCD
+IaC & config:   Terraform, Ansible, Vagrant
+CI/CD:          GitHub Actions
+Monitoring:     Prometheus, Grafana
+Languages:      Python, Go, Bash
+Linux:          Arch, Ubuntu, Rocky
 
 EDUCATION
-═══════════════════════════════════════════════════════════════════════════════
+---------
+Infinity Labs R&D - DevOps program, Haifa
 
-Master of Science in Computer Science
-Stanford University | 2017-2019
-• Focus: Distributed Systems and Cloud Computing
-• Thesis: "Scalable Container Orchestration for Microservices"
+TODO: add military service, dates, anything else true and relevant.
 
-Bachelor of Science in Computer Science
-University of California, Berkeley | 2013-2017
-• Magna Cum Laude
-• Relevant Coursework: Algorithms, Systems Programming, Network Security
-
-CERTIFICATIONS & AWARDS
-═══════════════════════════════════════════════════════════════════════════════
-
-• AWS Certified Solutions Architect - Professional
-• Certified Kubernetes Administrator (CKA)
-• HashiCorp Certified Terraform Associate
-• Google Cloud Professional Cloud Architect
-
-• "Innovator of the Year" - TechCorp Inc. (2023)
-• Open source contributor to Kubernetes and Prometheus projects
-
-INTERESTS & COMMUNITY
-═══════════════════════════════════════════════════════════════════════════════
-
-• Open source contributor and maintainer
-• Speaker at KubeCon, DockerCon, and local tech meetups
-• Mentor for underrepresented groups in technology
-• Avid cyclist and hiker in Northern California
+Type 'projects' to see what I have built.
