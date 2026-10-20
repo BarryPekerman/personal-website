@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barry Pekerman</title>
+<meta name="description" content="Barry Pekerman, junior DevOps engineer. Explore my CV and projects in a terminal; the status panel shows the live deployment serving this page.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<style>
+  :root {
+    --bg: #05080f;
+    --panel: #0b1322;
+    --panel-2: #0f1a2e;
+    --line: #1d3557;
+    --cyan: #5fd3ff;
+    --text: #b9d6ee;
+    --dim: #5b7a99;
+    --red: #ff5c5c;
+    --amber: #ffb84d;
+    --green: #6dffa8;
+    --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 var(--mono);
+    overflow-x: hidden;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* scanlines over everything, very faint */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 60;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+  }
+
+  /* ---------- boot: password breaker ---------- */
+  #boot {
+    position: fixed; inset: 0; z-index: 100; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    cursor: pointer; transition: opacity .35s;
+  }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  .boot-label { color: var(--dim); letter-spacing: .3em; font-size: 11px; text-align: center; padding: 0 16px; }
+  #crack { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  #crack span {
+    width: 28px; height: 40px; display: grid; place-items: center;
+    border: 1px solid var(--line); background: var(--panel);
+    font-size: 22px; color: var(--dim);
+  }
+  #crack span.locked { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px rgba(95,211,255,.35); }
+  #crack span.gap { border: none; background: none; width: 14px; }
+  #boot-status { color: var(--amber); font-size: 12px; min-height: 1.5em; }
+  .skip { color: var(--dim); font-size: 11px; }
+
+  /* ---------- layout ---------- */
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; gap: 10px; padding: 10px; }
+
+  header.hud {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+    border: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    padding: 10px 14px;
+  }
+  .who h1 { font-size: 20px; color: #fff; letter-spacing: .08em; }
+  .who p { color: var(--cyan); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn {
+    border: 1px solid var(--line); padding: 4px 10px; color: var(--text); background: var(--panel);
+    font: inherit; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--cyan); color: var(--cyan); text-decoration: none; }
+  .btn.primary { border-color: var(--cyan); color: var(--cyan); }
+  .clock { margin-left: auto; text-align: right; color: var(--dim); font-size: 12px; }
+  .clock b { color: var(--text); font-size: 15px; display: block; }
+
+  main { display: grid; grid-template-columns: 250px 1fr 270px; gap: 10px; min-height: 0; }
+
+  .panel { border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .panel h2 {
+    font-size: 11px; letter-spacing: .25em; color: var(--dim); font-weight: 400;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .panel .body { padding: 10px; overflow: auto; }
+
+  /* remote systems = projects */
+  .sys { padding: 8px; border: 1px solid transparent; cursor: pointer; margin-bottom: 4px; }
+  .sys:hover, .sys.active { border-color: var(--cyan); background: rgba(95,211,255,.06); }
+  .sys .name { color: #fff; }
+  .sys .meta { display: flex; gap: 10px; font-size: 11px; }
+  .sys .meta span { color: var(--green); }
+  .hint { color: var(--dim); font-size: 11px; margin-top: 8px; }
+
+  /* terminal */
+  .console { background: #03060b; }
+  .term-wrap { flex: 1; min-height: 0; padding: 6px 0 0 8px; }
+  #terminal { width: 100%; height: 100%; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
+
+  /* status */
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin-bottom: 14px; }
+  .kv dt { color: var(--dim); }
+  .kv dd { color: #fff; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .route { list-style: none; margin-bottom: 14px; }
+  .route li { position: relative; padding: 0 0 8px 16px; }
+  .route li::before { content: ""; position: absolute; left: 3px; top: 6px; width: 7px; height: 7px; border: 1px solid var(--cyan); border-radius: 50%; }
+  .route li:first-child::before { border-color: var(--amber); }
+  .route li:not(:last-child)::after { content: ""; position: absolute; left: 6px; top: 14px; bottom: 0; border-left: 1px dashed var(--cyan); }
+  .route b { color: #fff; font-weight: 400; }
+  .route small { color: var(--dim); display: block; font-size: 11px; }
+  .sub { font-size: 11px; letter-spacing: .25em; color: var(--dim); margin-bottom: 6px; }
+  .contract { border: 1px dashed var(--amber); padding: 8px; color: var(--amber); font-size: 12px; margin-bottom: 10px; }
+  .contract b { display: block; color: #fff; margin-bottom: 4px; }
+  .seats { color: var(--green); }
+  .live { color: var(--green); }
+  .stale { color: var(--dim); }
+
+  /* responsive: stack on narrow screens, page scrolls */
+  @media (max-width: 980px) {
+    .app { height: auto; min-height: 100vh; }
+    main { grid-template-columns: 1fr; }
+    .console { order: -1; height: 70vh; }
+    .clock { margin-left: 0; text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Boot: password-breaker effect, 2 seconds, skippable -->
+<div id="boot" title="Click to skip">
+  <div class="boot-label">PASSWORD BREAKER v1.0 — DECRYPTING IDENTITY</div>
+  <div id="crack"></div>
+  <div id="boot-status">&nbsp;</div>
+  <div class="skip">click or press any key to skip</div>
+</div>
+
+<div class="app">
+  <!-- HUD: the part HR reads. Plain, visible, no typing needed -->
+  <header class="hud">
+    <div class="who">
+      <h1>BARRY PEKERMAN</h1>
+      <p>Junior DevOps Engineer · AWS SA Associate · Israel</p>
+    </div>
+    <nav class="links">
+      <button class="btn primary" data-run="cv">CV</button>
+      <a class="btn" href="https://github.com/BarryPekerman" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn" href="https://play.barrypekerman.com/" target="_blank" rel="noopener">The Handover</a>
+      <button class="btn" id="music" title="Ambient music (off by default)">♪ off</button>
+      <button class="btn" id="sfx" title="Sound effects (off by default)">sfx off</button>
+    </nav>
+    <div class="clock"><b id="clock">--:--:--</b>UTC</div>
+  </header>
+
+  <main>
+    <!-- Left: projects as remote systems; clicking one opens its write-up in the terminal -->
+    <section class="panel">
+      <h2><span>REMOTE SYSTEMS</span><span id="sys-count"></span></h2>
+      <div class="body">
+        <div id="systems"></div>
+        <p class="hint">Click a system to read it in the terminal.</p>
+      </div>
+    </section>
+
+    <!-- Center: the real terminal (server-side virtual shell over a WebSocket) -->
+    <section class="panel console">
+      <h2><span>TERMINAL</span><span>guest@barrypekerman.com</span></h2>
+      <div class="term-wrap"><div id="terminal" data-manual="1"></div></div>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <!-- Right: live facts about the deployment serving this page -->
+    <section class="panel">
+      <h2><span>SYSTEM STATUS</span><span id="live" class="stale">● …</span></h2>
+      <div class="body">
+        <dl class="kv">
+          <dt>pod</dt><dd id="s-pod">…</dd>
+          <dt>node</dt><dd id="s-node">…</dd>
+          <dt>region</dt><dd id="s-region">…</dd>
+          <dt>commit</dt><dd id="s-commit">…</dd>
+          <dt>uptime</dt><dd id="s-uptime">…</dd>
+          <dt>terminals open</dt><dd id="s-sessions">…</dd>
+        </dl>
+
+        <div class="sub">YOUR ROUTE HERE</div>
+        <ul class="route" id="route"></ul>
+
+        <div class="contract">
+          <b>THE HANDOVER</b>
+          A live CTF: each player gets a real, isolated Linux shell.<br>
+          <span class="seats" id="seats">checking seats…</span><br>
+          <a href="https://play.barrypekerman.com/" target="_blank" rel="noopener">enter the game →</a>
+        </div>
+        <div class="contract">
+          <b>OPEN CONTRACT</b>
+          Seeking: junior DevOps / platform engineering role, Israel (Tel Aviv / Haifa area).
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
+<script src="/static/js/terminal.js?v=3"></script>
+<script src="/static/js/audio.js?v=1"></script>
+<script>
+// ---------- projects: the files in content/projects, with their public repos ----------
+const SYSTEMS = [
+  { file: 'the-handover.md',          name: 'the-handover',          link: 'https://play.barrypekerman.com/', label: 'live' },
+  { file: 'oke-version-guard.md',     name: 'oke-version-guard',     link: 'https://github.com/BarryPekerman/oke-version-guard', label: 'repo' },
+  { file: 'terraform-aws-chatops.md', name: 'terraform-aws-chatops', link: 'https://github.com/BarryPekerman/terraform-aws-chatops', label: 'repo' },
+  { file: 'k8s-cluster-vagrant.md',   name: 'k8s-cluster-vagrant',   link: 'https://github.com/BarryPekerman/K8s-Cluster-Vagrant', label: 'repo' },
+  { file: 'portfolio-terminal.md',    name: 'portfolio-terminal',    link: 'https://github.com/BarryPekerman/personal-website', label: 'repo' },
+];
+
+// ---------- terminal ----------
+const terminal = new PortfolioTerminal(document.getElementById('terminal'), {
+  fontSize: 13,
+  fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
+  theme: { background: '#03060b', foreground: '#b9d6ee', cursor: '#5fd3ff', selectionBackground: '#1d3557' },
+  onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); },
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-run]');
+  if (b) terminal.run(b.dataset.run);
+});
+['help', 'cv', 'projects', 'contact', 'clear'].forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'btn'; b.textContent = c; b.dataset.run = c;
+  document.getElementById('chips').appendChild(b);
+});
+
+const sysBox = document.getElementById('systems');
+document.getElementById('sys-count').textContent = SYSTEMS.length;
+SYSTEMS.forEach(s => {
+  const d = document.createElement('div');
+  d.className = 'sys';
+  const name = document.createElement('div');
+  name.className = 'name'; name.textContent = s.name;
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const open = document.createElement('span'); open.textContent = 'OPEN';
+  const a = document.createElement('a');
+  a.href = s.link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = s.label + ' ↗';
+  a.onclick = e => e.stopPropagation();
+  meta.append(open, a);
+  d.append(name, meta);
+  d.onclick = () => {
+    sysBox.querySelectorAll('.sys').forEach(x => x.classList.toggle('active', x === d));
+    Sfx.connected();
+    terminal.run('cat ~/projects/' + s.file);
+  };
+  sysBox.appendChild(d);
+});
+
+// ---------- boot: password breaker ----------
+const NAME = 'BARRY PEKERMAN';
+const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&@';
+const crack = document.getElementById('crack');
+const cells = [...NAME].map(ch => {
+  const s = document.createElement('span');
+  if (ch === ' ') s.className = 'gap';
+  crack.appendChild(s);
+  return { el: s, ch, locked: ch === ' ' };
+});
+let bootDone = false;
+const spin = setInterval(() => {
+  cells.forEach(c => { if (!c.locked) c.el.textContent = GLYPHS[Math.random() * GLYPHS.length | 0]; });
+}, 45);
+cells.filter(c => !c.locked).forEach((c, i) => setTimeout(() => lock(c), 250 + i * 85));
+function lock(c) { c.locked = true; c.el.textContent = c.ch; c.el.classList.add('locked'); }
+setTimeout(() => { document.getElementById('boot-status').textContent = 'IDENTITY CONFIRMED · CONNECTION ESTABLISHED'; }, 1450);
+setTimeout(finishBoot, 1900);
+function finishBoot() {
+  if (bootDone) return;
+  bootDone = true;
+  clearInterval(spin);
+  document.getElementById('boot').classList.add('gone');
+  terminal.term.focus();
+}
+document.getElementById('boot').addEventListener('click', finishBoot);
+window.addEventListener('keydown', finishBoot, { once: true });
+
+// ---------- clock ----------
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toISOString().slice(11, 19);
+}, 1000);
+
+// ---------- status: /api/status, refreshed every 15 s ----------
+const $ = id => document.getElementById(id);
+let started = null;
+function fmtUptime(ms) {
+  const s = Math.max(0, ms / 1000 | 0);
+  const d = s / 86400 | 0, h = s / 3600 % 24 | 0, m = s / 60 % 60 | 0, sec = s % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return (d ? d + 'd ' : '') + pad(h) + ':' + pad(m) + ':' + pad(sec);
+}
+setInterval(() => { if (started) $('s-uptime').textContent = fmtUptime(Date.now() - started); }, 1000);
+
+function routeItem(title, detail) {
+  const li = document.createElement('li');
+  const b = document.createElement('b'); b.textContent = title;
+  const small = document.createElement('small'); small.textContent = detail;
+  li.append(b, small);
+  return li;
+}
+
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const s = await r.json();
+    $('s-pod').textContent = s.pod || 'n/a (not in a cluster)';
+    $('s-pod').title = s.pod || '';
+    $('s-node').textContent = s.node || 'n/a';
+    $('s-region').textContent = s.region || 'n/a';
+    const c = $('s-commit');
+    c.textContent = '';
+    if (/^[0-9a-f]{40}$/.test(s.commit)) {
+      const a = document.createElement('a');
+      a.href = 'https://github.com/BarryPekerman/personal-website/commit/' + s.commit;
+      a.target = '_blank'; a.rel = 'noopener'; a.textContent = s.commit.slice(0, 7);
+      c.appendChild(a);
+    } else c.textContent = s.commit;
+    started = Date.parse(s.started);
+    $('s-sessions').textContent = s.sessions;
+
+    const route = $('route');
+    route.replaceChildren(
+      routeItem('you' + (s.visitor.country ? ' · ' + s.visitor.country : ''), 'your browser'),
+      routeItem('Cloudflare' + (s.visitor.colo ? ' · ' + s.visitor.colo : ''), 'edge location that took your request'),
+      routeItem('tunnel → OKE' + (s.region ? ' · ' + s.region : ''), 'cloudflared in the cluster; no open ports'),
+      routeItem('pod · ' + (s.pod || 'local'), 'this server, node ' + (s.node || 'n/a')),
+    );
+
+    $('seats').textContent = s.handover
+      ? `${s.handover.players} / ${s.handover.max} seats taken right now`
+      : 'seat count unavailable';
+    $('live').textContent = '● LIVE'; $('live').className = 'live';
+  } catch (e) {
+    $('live').textContent = '● OFFLINE'; $('live').className = 'stale';
+  }
+}
+refreshStatus();
+setInterval(refreshStatus, 15000);
+</script>
+</body>
+</html>

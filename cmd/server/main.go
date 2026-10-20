@@ -15,7 +15,11 @@ import (
 	terminalHandlers "portfolio/internal/handlers"
 	"portfolio/internal/k8s"
 	"portfolio/internal/shell"
+	"portfolio/internal/status"
 )
+
+// commit is set at build time: -ldflags "-X main.commit=<sha>"
+var commit = "dev"
 
 func main() {
 	logger := logrus.New()
@@ -53,14 +57,26 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	// Front page: the Uplink-style design (static for now); the working
-	// terminal is at /terminal until the front page embeds it
+	// Front page: Uplink-style HUD around the terminal; /terminal is the
+	// terminal alone, full screen
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/static/mockup.html")
+		http.ServeFile(w, r, "web/templates/home.html")
 	})
 	mux.HandleFunc("GET /terminal", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/templates/index.html")
 	})
+	statusInfo := status.Info{
+		Pod:     os.Getenv("POD_NAME"),
+		Node:    os.Getenv("NODE_NAME"),
+		Region:  os.Getenv("REGION"),
+		Commit:  commit,
+		Started: time.Now().UTC(),
+	}
+	handoverURL := os.Getenv("HANDOVER_HEALTHZ_URL")
+	if handoverURL == "" {
+		handoverURL = "https://play.barrypekerman.com/healthz"
+	}
+	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminalHandlers.ActiveSessions, handoverURL, 30*time.Second))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
