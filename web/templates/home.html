@@ -45,14 +45,15 @@
   }
   #boot.gone { opacity: 0; pointer-events: none; }
   .boot-label { color: var(--dim); letter-spacing: .3em; font-size: 11px; text-align: center; padding: 0 16px; }
-  #crack { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  /* one row at any width: the boxes shrink to fit 12 letters + a gap on a phone */
+  #crack { display: flex; gap: min(4px, .8vw); justify-content: center; }
   #crack span {
-    width: 28px; height: 40px; display: grid; place-items: center;
+    width: min(28px, 6.2vw); height: min(40px, 8.8vw); display: grid; place-items: center;
     border: 1px solid var(--line); background: var(--panel);
-    font-size: 22px; color: var(--dim);
+    font-size: min(22px, 4.8vw); color: var(--dim);
   }
   #crack span.locked { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px rgba(95,211,255,.35); }
-  #crack span.gap { border: none; background: none; width: 14px; }
+  #crack span.gap { border: none; background: none; width: min(14px, 3vw); }
   #boot-status { color: var(--amber); font-size: 12px; min-height: 1.5em; }
   .skip { color: var(--dim); font-size: 11px; }
 
@@ -236,7 +237,7 @@
 <script src="/static/js/terminal.js?v=3"></script>
 <script src="/static/js/audio.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="/static/js/routemap.js?v=3"></script>
+<script src="/static/js/routemap.js?v=4"></script>
 <script>
 // ---------- projects: the files in content/projects, with their public repos ----------
 const SYSTEMS = [
@@ -343,6 +344,14 @@ function routeItem(title, detail) {
   return li;
 }
 
+// nearestLink is the tunnel connection closest to an edge (rough distance in degrees)
+function nearestLink(colo, links) {
+  const p = COLO_POS[colo];
+  if (!p || !links.length) return null;
+  const d = l => { const q = COLO_POS[l.colo]; return Math.hypot(q[0] - p[0], (q[1] - p[1]) * Math.cos(p[0] * Math.PI / 180)); };
+  return links.reduce((a, b) => d(b) < d(a) ? b : a);
+}
+
 async function refreshStatus() {
   try {
     const r = await fetch('/api/status', { cache: 'no-store' });
@@ -364,14 +373,17 @@ async function refreshStatus() {
     $('s-sessions').textContent = s.sessions;
 
     // the tunnel: where cloudflared in the cluster is connected to Cloudflare
-    // right now, and whether the edge that took this request is one of them
+    // right now. A request enters it at its own edge when that edge holds a
+    // connection; otherwise Cloudflare carries it on to one that does, which
+    // the origin isn't told: the map assumes the nearest.
     const country = s.visitor.country, colo = s.visitor.colo;
-    const tunnel = s.tunnel || [];
+    const tunnel = (s.tunnel || []).filter(l => COLO_POS[l.colo]);
     const mine = tunnel.find(l => l.colo === colo);
+    const via = mine || nearestLink(colo, tunnel);
     const conns = n => n + (n === 1 ? ' connection' : ' connections');
     let tunnelDetail = 'cloudflared in the cluster; no open ports';
     if (mine) tunnelDetail = `${colo} holds ${conns(mine.connections)} of the tunnel: your request goes straight in`;
-    else if (tunnel.length && colo) tunnelDetail = `no tunnel connection at ${colo}: Cloudflare's network carries it to one`;
+    else if (via && colo) tunnelDetail = `no tunnel connection at ${colo}: Cloudflare carries it on, most likely to ${via.colo} (nearest)`;
     const route = $('route');
     route.replaceChildren(
       routeItem('you' + (country ? ' · ' + country : ''), 'your browser'),
@@ -380,11 +392,13 @@ async function refreshStatus() {
       routeItem('OKE' + (s.region ? ' · ' + s.region : ''), 'pod ' + (s.pod || 'local') + ', node ' + (s.node || 'n/a')),
     );
 
-    routeMap.draw([
+    const hops = [
       { pos: COUNTRY_POS[country] || null, label: 'you · ' + (country || '?'), you: true },
       { pos: COLO_POS[colo] || null, label: 'Cloudflare · ' + (colo || '?') },
-      { pos: REGION_POS[s.region] || null, label: 'OKE · ' + (s.region || '?') },
-    ], tunnel.map(l => ({ pos: COLO_POS[l.colo] || null, label: `tunnel · ${l.colo} ×${l.connections}` })));
+    ];
+    if (via && !mine) hops.push({ pos: COLO_POS[via.colo], label: 'tunnel · ' + via.colo });
+    hops.push({ pos: REGION_POS[s.region] || null, label: 'OKE · ' + (s.region || '?') });
+    routeMap.draw(hops, tunnel.map(l => ({ pos: COLO_POS[l.colo], label: `tunnel · ${l.colo} ×${l.connections}` })));
 
     $('seats').textContent = s.handover
       ? `${s.handover.players} / ${s.handover.max} seats taken right now`
