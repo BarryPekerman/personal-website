@@ -50,8 +50,7 @@ const REGION_POS = { 'il-jerusalem-1': [31.77, 35.21] };
 class RouteMap {
   constructor(svg) {
     this.svg = svg;
-    this.W = 600; this.H = 260;
-    svg.setAttribute('viewBox', `0 0 ${this.W} ${this.H}`);
+    this.W = 600; this.H = 260;  // replaced by the element's size in resize()
     this.landLayer = this.el('g', {});
     this.routeLayer = this.el('g', {});
     this.nodeLayer = this.el('g', {});
@@ -61,7 +60,19 @@ class RouteMap {
     this.key = '';
     this.path = null;     // the drawn route, for packets to travel along
     this.inFlight = 0;
+    // one map unit per screen pixel, so the map fills its panel at any shape
+    this.resize();
+    new ResizeObserver(() => this.resize()).observe(svg);
     this.loadLand();
+  }
+
+  resize() {
+    const r = this.svg.getBoundingClientRect();
+    const W = Math.max(200, Math.round(r.width)), H = Math.max(120, Math.round(r.height));
+    if (W === this.W && H === this.H && this.svg.hasAttribute('viewBox')) return;
+    this.W = W; this.H = H;
+    this.svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    this.render();
   }
 
   el(tag, attrs, parent = this.svg) {
@@ -98,16 +109,18 @@ class RouteMap {
     this.render();
   }
 
-  // the window (in degrees) that fits the known hops, at the map's aspect ratio
+  // the window (in degrees) that fits the visitor's route (not the tunnel
+  // links: one far away would shrink a local route to a smudge; those are
+  // drawn running off the map's edge instead)
   view() {
-    const pts = [...this.hops, ...this.links].filter(h => h.pos).map(h => h.pos);
+    const pts = this.hops.filter(h => h.pos).map(h => h.pos);
     if (!pts.length) return { lon0: -180, lat1: 90, span: 360 };
     const lats = pts.map(p => p[0]), lons = pts.map(p => p[1]);
     const cLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const cLon = (Math.min(...lons) + Math.max(...lons)) / 2;
     const aspect = this.W / this.H;
-    let span = Math.max(16, (Math.max(...lons) - Math.min(...lons)) * 1.4,
-      (Math.max(...lats) - Math.min(...lats)) * 1.4 * aspect);
+    let span = Math.max(4, (Math.max(...lons) - Math.min(...lons)) * 1.5,
+      (Math.max(...lats) - Math.min(...lats)) * 1.6 * aspect);
     span = Math.min(span, 360);
     return { lon0: cLon - span / 2, lat1: cLat + span / aspect / 2, span };
   }
@@ -119,7 +132,7 @@ class RouteMap {
 
     this.landLayer.replaceChildren();
     if (this.rings) {
-      const step = v.span / 66;  // about 66 dots across, whatever the zoom
+      const step = v.span / (this.W / 9);  // a dot every 9 px, whatever the zoom
       for (let x = step / 2; x < this.W; x += step * k) {
         for (let y = step / 2; y < this.H; y += step * k) {
           const lon = v.lon0 + x / k, lat = v.lat1 - y / k;
@@ -130,19 +143,27 @@ class RouteMap {
 
     this.routeLayer.replaceChildren();
     this.nodeLayer.replaceChildren();
+    this.labels = [];
     const shown = this.hops.filter(h => h.pos);
     this.path = null;
-    // tunnel links under the route; a link at a hop's location gets no label
-    // of its own (the hop's label already names the place)
+    // tunnel links under the route. One at a hop's location gets no label of
+    // its own (the hop's names the place); one off the map is labelled where
+    // its line leaves it.
     const end = shown.length && shown[shown.length - 1];
     for (const l of end ? this.links : []) {
       const [x, y] = px(l.pos), [ex, ey] = px(end.pos);
       this.el('path', { d: `M${x} ${y} L${ex} ${ey}`, class: 'tunnel-link' }, this.routeLayer);
       if (shown.some(h => h.pos[0] === l.pos[0] && h.pos[1] === l.pos[1])) continue;
       const g = this.el('g', { class: 'node tunnel' }, this.nodeLayer);
-      this.el('circle', { cx: x, cy: y, r: 3 }, g);
-      const t = this.el('text', { x: x + 7, y: y + 12 }, g);
-      t.textContent = l.label;
+      if (x >= 0 && x <= this.W && y >= 0 && y <= this.H) {
+        this.el('circle', { cx: x, cy: y, r: 3 }, g);
+        this.label(g, x + 7, y + 12, 'start', l.label);
+      } else {
+        const [bx, by] = this.edgePoint(ex, ey, x, y);
+        const left = bx < this.W / 2;
+        this.label(g, left ? 6 : this.W - 6, Math.min(this.H - 6, Math.max(12, by + 14)),
+          left ? 'start' : 'end', (left ? '← ' : '') + l.label + (left ? '' : ' →'));
+      }
     }
     if (shown.length > 1) {
       const d = shown.map((h, i) => (i ? 'L' : 'M') + px(h.pos).join(' ')).join(' ');
@@ -153,11 +174,32 @@ class RouteMap {
       const g = this.el('g', { class: 'node' + (h.you ? ' you' : '') }, this.nodeLayer);
       if (i === shown.length - 1) this.el('circle', { cx: x, cy: y, r: 5, class: 'ping' }, g);
       this.el('circle', { cx: x, cy: y, r: 5 }, g);
-      // alternate labels left and right so close hops stay readable
-      const right = i % 2 === 0;
-      const t = this.el('text', { x: right ? x + 9 : x - 9, y: y + 4 - 10 + i * 10, 'text-anchor': right ? 'start' : 'end' }, g);
-      t.textContent = h.label;
+      this.label(g, x + 9, y + 4, 'start', h.label);
     });
+  }
+
+  // label places a text, moved down or up (nearest first, staying on the
+  // map) until it clears the ones already placed
+  label(parent, x, y, anchor, text) {
+    const t = this.el('text', { x, y, 'text-anchor': anchor }, parent);
+    t.textContent = text;
+    const hits = b => this.labels.some(o => b.x < o.x + o.width && o.x < b.x + b.width && b.y < o.y + o.height && o.y < b.y + b.height);
+    for (const dy of [0, 12, -12, 24, -24, 36, -36]) {
+      const ty = Math.min(this.H - 4, Math.max(11, y + dy));
+      t.setAttribute('y', ty);
+      if (!hits(t.getBBox())) break;
+    }
+    this.labels.push(t.getBBox());
+  }
+
+  // edgePoint is where the line from (ex, ey), on the map, toward (x, y) leaves it
+  edgePoint(ex, ey, x, y) {
+    let t = 1;
+    if (x < 0) t = Math.min(t, -ex / (x - ex));
+    if (x > this.W) t = Math.min(t, (this.W - ex) / (x - ex));
+    if (y < 0) t = Math.min(t, -ey / (y - ey));
+    if (y > this.H) t = Math.min(t, (this.H - ey) / (y - ey));
+    return [ex + (x - ex) * t, ey + (y - ey) * t];
   }
 
   // packet animates one real message along the route: 'out' is the
