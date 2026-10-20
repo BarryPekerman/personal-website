@@ -69,7 +69,7 @@ func main() {
 		best[code] = rank[kind]
 		out.Airports[code] = [2]float64{round(lat), round(lon)}
 	}
-	body.Close() //nolint:errcheck // read-only body
+	_ = body.Close() // read-only body
 
 	body = fetch(countriesURL)
 	var countries []struct {
@@ -79,7 +79,7 @@ func main() {
 	if err := json.NewDecoder(body).Decode(&countries); err != nil {
 		log.Fatal(err)
 	}
-	body.Close() //nolint:errcheck // read-only body
+	_ = body.Close() // read-only body
 	for _, c := range countries {
 		if len(c.CCA2) == 2 && len(c.LatLng) == 2 {
 			out.Countries[c.CCA2] = [2]float64{round(c.LatLng[0]), round(c.LatLng[1])}
@@ -93,7 +93,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile("places.json", append(b, '\n'), 0o644); err != nil {
+	if err := os.WriteFile("places.json", append(b, '\n'), 0o644); err != nil { //nolint:gosec // a committed data file, meant to be readable
 		log.Fatal(err)
 	}
 	fmt.Printf("places.json: %d airports, %d countries\n", len(out.Airports), len(out.Countries))
