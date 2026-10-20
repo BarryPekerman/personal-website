@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script>
+        // No terminal on phones (same test as the front page's phone layout):
+        // send them to the page made for them
+        if (matchMedia('(max-width: 700px), (max-height: 500px) and (pointer: coarse)').matches) location.replace('/');
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barry Pekerman — Portfolio Terminal</title>
     <style>
