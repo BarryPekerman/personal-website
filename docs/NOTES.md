@@ -1,6 +1,6 @@
 # Project notes
 
-Working notes and decisions. Last updated 2026-10-16.
+Working notes and decisions. Last updated 2026-10-20.
 
 **Current direction: see "No fake widgets" below. It overrides older sections where they disagree.**
 
@@ -84,17 +84,29 @@ a DevOps portfolio instead of a theme.
 
 Open question to settle with fresh eyes: does this match what felt wrong?
 
+## Where it runs (live since 2026-10-20)
+
+https://barrypekerman.com (and www). Nothing about the site lives in The
+Handover's infra (handover-hosting), so taking the game down can't take the
+site with it.
+
+| Piece | Where |
+|---|---|
+| Image | `ghcr.io/barrypekerman/personal-website:<commit>`, multi-arch (the nodes are ARM), built by CI on every merge to `main`; `ghcr-retention.yml` keeps the newest 10 |
+| Deploy | `oke-gitops` `portfolio/`: ArgoCD Application; deploying is bumping the image commit in `deployment.yaml` |
+| Exposure | Cloudflare Tunnel `oke-portfolio`: cloudflared runs in the cluster (outbound only); token is a SOPS secret in `oke-gitops` |
+| DNS, tunnel | `oci-oke-infra` `terraform/cloudflare.tf` (local runs; HCP state `Berries-/oci-oke-infra`) |
+| Status panel | `/api/status`: pod and node (Downward API), commit (`-X main.commit`), uptime, open terminals, The Handover's seats (its `/healthz`) |
+| Route map | Visitor country (`CF-IPCountry`) → edge (`CF-Ray` suffix) → the tunnel connection it enters at (cloudflared metrics) → cluster; positions from `internal/geo` (generated: OurAirports, mledoze/countries) |
+
 ## Roadmap
 
-1. [x] Virtual shell, tests, lint, CI, Docker image (PR #1, green)
-2. [ ] Fresh-eyes review of the "no fake widgets" direction
-3. [ ] Review `content/` (every line true; fill the TODOs; make the CV PDF)
-4. [ ] Page layout: HUD (name, title, CV, links), projects, contract card, console
-5. [ ] Real data: game status from `/healthz`; pod/node/commit/uptime; route from Cloudflare headers
-6. [ ] Deploy to OKE via ArgoCD (rewrite the stale `k8s/` and `argocd/` manifests)
-7. [ ] Uplink styling, music/sfx toggles
+1. [x] Virtual shell, tests, lint, CI, Docker image (PR #1)
+2. [x] "No fake widgets" direction: settled and built
+3. [ ] Review `content/`: every line true (done); the real CV and its PDF, email and LinkedIn still to come
+4. [x] Page layout: HUD (name, title, CV, links), projects, contract card, console
+5. [x] Real data: game seats from `/healthz`; pod/node/commit/uptime; route from Cloudflare headers and the tunnel's connections
+6. [x] Deploy to OKE via ArgoCD (`oke-gitops` `portfolio/`; the stale `k8s/` and `argocd/` manifests are deleted)
+7. [x] Uplink styling, music/sfx toggles
 8. [ ] Remove k8s mode and `connect sandbox` (The Handover is the real shell)
-9. [ ] Make the repo public once 3–6 are done
-
-Timebox: steps 2–4 are about one weekend. This is a side project next to
-LFCS (main priority) and the Ethereum node project.
+9. [x] Make the repo public

@@ -15,15 +15,18 @@ BUILD
   browser only renders
 - The shell you are using is a virtual shell written in Go: it reads files
   embedded in the binary, so nothing you type ever runs on a real system
-- One Session interface, three swappable backends (virtual / local / k8s), so
-  the safe simulation and a future real sandbox share the same contract
+- Runs on my OKE (Oracle Kubernetes) cluster, deployed by ArgoCD from a GitOps
+  repo; Cloudflare reaches it through an outbound-only tunnel, so the site
+  needs no inbound port or load balancer
+- The panels around the terminal show the live deployment: the pod and node
+  serving you, the commit it was built from, and your real route to it
 - Tested with the race detector, linted, and scanned with govulncheck on every
   push through GitHub Actions
 
 RESULT
 ------
 The page you are reading is the demo: a running, tested, sandboxed Go service
-rather than a screenshot of one. Next: a real shell in one locked-down
-Kubernetes pod per visitor (gVisor runtime, per-IP limits, warm pod pool).
+rather than a screenshot of one. For a real shell, see the-handover.
 
-STACK: Go, WebSockets, xterm.js, Docker, Kubernetes, GitHub Actions, govulncheck
+STACK: Go, WebSockets, xterm.js, Docker, Kubernetes (OKE), ArgoCD, Terraform,
+Cloudflare Tunnel, GitHub Actions, govulncheck

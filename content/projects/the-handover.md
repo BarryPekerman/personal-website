@@ -18,8 +18,8 @@ BUILD
 -----
 - One network-less Incus container per player: a real shell, with no route to
   the network, to other players, or to the host
-- A capacity model instead of unbounded spawning -- a fixed pool of seats
-  (currently 20), with live occupancy exposed at /healthz
+- A capacity model instead of unbounded spawning -- a fixed pool of seats,
+  with live occupancy exposed at /healthz
 - A landing page that gates entry to the game rather than dropping visitors
   straight onto a live container
 
@@ -31,5 +31,3 @@ same isolated-shell system that the portfolio terminal's future "real shell"
 mode was going to build; it already exists here.
 
 STACK: Incus (system containers), Linux, network isolation, HTTP health/seat API
-TODO (Barry): add a headline number if there is one -- levels, sessions served,
-or uptime.

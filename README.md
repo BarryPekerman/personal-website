@@ -2,6 +2,8 @@
 
 My portfolio website, styled after the hacking game *Uplink*: visitors get a
 terminal in the browser and explore my CV and projects with `ls`, `cat` and `cd`.
+Live at https://barrypekerman.com, on my OKE cluster; around the terminal, the
+page shows the real deployment serving it and the visitor's route to it.
 
 ## How it works
 
@@ -50,16 +52,24 @@ content/           files visitors browse (embedded via go:embed)
 internal/handlers/ WebSocket <-> shell session bridge
 internal/shell/    Session interface + virtual, local and k8s backends
 internal/k8s/      pod lifecycle for k8s mode
-web/               index.html + xterm.js client
-k8s/, argocd/      deployment manifests (stale; rewrite pending)
+internal/status/   /api/status: the live deployment and the visitor's route
+internal/geo/      positions for the route map (generated: go generate ./internal/geo)
+web/               front page (home.html), full-screen terminal, xterm.js client
 manifests/docker/  guest image for k8s mode
 ```
+
+## Deploy
+
+CI pushes `ghcr.io/barrypekerman/personal-website:<commit>` on every merge to
+`main`. Deploying is bumping that commit in `oke-gitops` `portfolio/deployment.yaml`;
+ArgoCD does the rest. Where everything runs: [docs/NOTES.md](docs/NOTES.md#where-it-runs-live-since-2026-10-20).
 
 ## Roadmap
 
 Details and reasoning: [docs/NOTES.md](docs/NOTES.md).
 
 - [x] Virtual shell, tests, lint and CI
-- [ ] Deploy to my k3s cluster via ArgoCD
-- [ ] Uplink styling
-- [ ] k8s mode done properly: gVisor runtime, per-IP rate limits, warm pod pool
+- [x] Deploy to my OKE cluster via ArgoCD
+- [x] Uplink styling, live status panel and route map
+- [ ] The real CV
+- [ ] Remove k8s mode (The Handover is the real shell)

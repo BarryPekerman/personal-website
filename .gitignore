@@ -1,4 +1,87 @@
-# Build artifacts
-/portfolio
-/portfolio-server
-*.tar.gz
+# Allow-list: ignore everything, then unignore exactly what's committed.
+# Adding a file? Add its !path line too ("nothing to commit" means it's missing).
+*
+
+# Directories (needed to traverse into them)
+!.github/
+!.github/workflows/
+!cmd/
+!cmd/server/
+!content/
+!content/projects/
+!docs/
+!internal/
+!internal/geo/
+!internal/geo/gen/
+!internal/handlers/
+!internal/k8s/
+!internal/shell/
+!internal/status/
+!manifests/
+!manifests/docker/
+!web/
+!web/static/
+!web/static/js/
+!web/static/videos/
+!web/templates/
+
+# Repo root
+!.dockerignore
+!.gitignore
+!.golangci.yml
+!Dockerfile
+!README.md
+!go.mod
+!go.sum
+!run-local.sh
+
+# CI
+!.github/workflows/ci.yml
+!.github/workflows/ghcr-retention.yml
+
+# Server
+!cmd/server/main.go
+!internal/geo/geo.go
+!internal/geo/places.json
+!internal/geo/gen/main.go
+!internal/handlers/terminal.go
+!internal/handlers/terminal_test.go
+!internal/k8s/client.go
+!internal/shell/interface.go
+!internal/shell/k8s.go
+!internal/shell/local.go
+!internal/shell/pipes.go
+!internal/shell/virtual.go
+!internal/shell/virtual_test.go
+!internal/status/status.go
+!internal/status/status_test.go
+
+# What visitors browse in the terminal (embedded in the binary)
+!content/.bash_history
+!content/.bashrc
+!content/.motd
+!content/.profile
+!content/contact_info.md
+!content/content.go
+!content/cv.txt
+!content/projects/k8s-cluster-vagrant.md
+!content/projects/oke-version-guard.md
+!content/projects/portfolio-terminal.md
+!content/projects/terraform-aws-chatops.md
+!content/projects/the-handover.md
+
+# Front end
+!web/static/js/audio.js
+!web/static/js/routemap.js
+!web/static/js/terminal.js
+!web/static/videos/Screencast from 2025-12-12 14-31-06.webm
+!web/templates/home.html
+!web/templates/index.html
+
+# k8s mode's guest image
+!manifests/docker/Dockerfile.guest
+!manifests/docker/guest-bashrc
+!manifests/docker/guest-profile
+
+# Docs
+!docs/NOTES.md
