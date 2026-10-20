@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"portfolio/internal/geo"
 )
 
 // Info is fixed for the life of the process
@@ -42,8 +44,18 @@ type Visitor struct {
 // TunnelLink is one Cloudflare edge location the cluster's tunnel is
 // connected to, and how many of its connections land there
 type TunnelLink struct {
-	Colo        string `json:"colo"`
-	Connections int    `json:"connections"`
+	Colo        string
+	Connections int
+}
+
+// Hop is one step of the visitor's route, for the map and the route panel
+type Hop struct {
+	Kind  string   `json:"kind"`  // you, edge, forward (Cloudflare carries it on to a tunnel connection), cluster
+	Label string   `json:"label"` // country, edge or region code
+	Pos   *geo.Pos `json:"pos"`   // null when the place isn't known: the map leaves it out
+	// Tunnel (edge only): the cluster's tunnel connects at this edge, so the
+	// request goes straight in
+	Tunnel bool `json:"tunnel,omitempty"`
 }
 
 type response struct {
@@ -55,8 +67,7 @@ type response struct {
 	Sessions int64     `json:"sessions"`
 	Visitor  Visitor   `json:"visitor"`
 	Handover *Seats    `json:"handover"` // null when the game can't be reached
-	// the tunnel's live connections; null when cloudflared can't be reached
-	Tunnel []TunnelLink `json:"tunnel"`
+	Route    []Hop     `json:"route"`
 }
 
 // Handler serves the status JSON
@@ -88,6 +99,7 @@ func NewHandler(info Info, sessions func() int64, src Sources) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	v := h.visitor(r)
 	resp := response{
 		Pod:      h.info.Pod,
 		Node:     h.info.Node,
@@ -95,13 +107,50 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Commit:   h.info.Commit,
 		Started:  h.info.Started,
 		Sessions: h.sessions(),
-		Visitor:  h.visitor(r),
+		Visitor:  v,
 		Handover: h.seats.get(r.Context()),
-		Tunnel:   h.tunnel.get(r.Context()),
+		Route:    route(v, h.tunnel.get(r.Context()), h.info.Region),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// route is the visitor's path: their country, the edge that took the request,
+// then into the tunnel. A request enters at its own edge when the tunnel has a
+// connection there; otherwise Cloudflare carries it on to one that has, which
+// the origin isn't told, so the route assumes the nearest. links is nil when
+// cloudflared can't be read: then nothing is assumed.
+func route(v Visitor, links []TunnelLink, region string) []Hop {
+	at := func(p geo.Pos, ok bool) *geo.Pos {
+		if !ok {
+			return nil
+		}
+		return &p
+	}
+	edgePos, edgeKnown := geo.Colo(v.Colo)
+	hops := []Hop{
+		{Kind: "you", Label: v.Country, Pos: at(geo.Country(v.Country))},
+		{Kind: "edge", Label: v.Colo, Pos: at(edgePos, edgeKnown)},
+	}
+	var nearest *TunnelLink
+	best := 0.0
+	for i, l := range links {
+		if l.Colo == v.Colo {
+			hops[1].Tunnel = true
+			nearest = nil
+			break
+		}
+		if p, ok := geo.Colo(l.Colo); ok && edgeKnown {
+			if d := geo.Distance(edgePos, p); nearest == nil || d < best {
+				nearest, best = &links[i], d
+			}
+		}
+	}
+	if nearest != nil {
+		hops = append(hops, Hop{Kind: "forward", Label: nearest.Colo, Pos: at(geo.Colo(nearest.Colo))})
+	}
+	return append(hops, Hop{Kind: "cluster", Label: region, Pos: at(geo.Region(region))})
 }
 
 func (h *Handler) visitor(r *http.Request) Visitor {
