@@ -109,18 +109,19 @@ class RouteMap {
     this.render();
   }
 
-  // the window (in degrees) that fits the visitor's route (not the tunnel
-  // links: one far away would shrink a local route to a smudge; those are
-  // drawn running off the map's edge instead)
+  // the window (in degrees) that fits the route and the tunnel's connections,
+  // never closer than a region (about Europe and the Middle East), so it
+  // always reads as a map; a local route is a short line inside it
   view() {
-    const pts = this.hops.filter(h => h.pos).map(h => h.pos);
+    const pts = [...this.hops, ...this.links].filter(h => h.pos).map(h => h.pos);
     if (!pts.length) return { lon0: -180, lat1: 90, span: 360 };
     const lats = pts.map(p => p[0]), lons = pts.map(p => p[1]);
     const cLat = (Math.min(...lats) + Math.max(...lats)) / 2;
     const cLon = (Math.min(...lons) + Math.max(...lons)) / 2;
     const aspect = this.W / this.H;
-    let span = Math.max(4, (Math.max(...lons) - Math.min(...lons)) * 1.5,
-      (Math.max(...lats) - Math.min(...lats)) * 1.6 * aspect);
+    // 10 degrees of latitude spare, so hops near the top or bottom keep room for labels
+    let span = Math.max(40, (Math.max(...lons) - Math.min(...lons)) * 1.3,
+      (Math.max(...lats) - Math.min(...lats) + 10) * aspect);
     span = Math.min(span, 360);
     return { lon0: cLon - span / 2, lat1: cLat + span / aspect / 2, span };
   }
@@ -136,7 +137,7 @@ class RouteMap {
       for (let x = step / 2; x < this.W; x += step * k) {
         for (let y = step / 2; y < this.H; y += step * k) {
           const lon = v.lon0 + x / k, lat = v.lat1 - y / k;
-          if (this.onLand(lon, lat)) this.el('circle', { cx: x, cy: y, r: 1.3, fill: '#16304f' }, this.landLayer);
+          if (this.onLand(lon, lat)) this.el('circle', { cx: x, cy: y, r: 1.5, fill: '#24507e' }, this.landLayer);
         }
       }
     }
@@ -183,6 +184,11 @@ class RouteMap {
   label(parent, x, y, anchor, text) {
     const t = this.el('text', { x, y, 'text-anchor': anchor }, parent);
     t.textContent = text;
+    // past the right edge: put it on the node's left instead
+    if (anchor === 'start' && t.getBBox().x + t.getBBox().width > this.W - 4) {
+      t.setAttribute('text-anchor', 'end');
+      t.setAttribute('x', x - 18);
+    }
     const hits = b => this.labels.some(o => b.x < o.x + o.width && o.x < b.x + b.width && b.y < o.y + o.height && o.y < b.y + b.height);
     for (const dy of [0, 12, -12, 24, -24, 36, -36]) {
       const ty = Math.min(this.H - 4, Math.max(11, y + dy));
