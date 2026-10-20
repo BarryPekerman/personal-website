@@ -1,3 +1,6 @@
+// Package shell provides the terminal backends behind a visitor session:
+// a simulated shell (virtual), the host shell (local, development only), and
+// a shell in a throwaway Kubernetes pod (k8s).
 package shell
 
 import (
@@ -35,4 +38,3 @@ type Manager interface {
 	// CreateSession creates a new shell session with the given ID
 	CreateSession(sessionID string) (Session, error)
 }
-

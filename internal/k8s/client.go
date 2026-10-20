@@ -1,3 +1,4 @@
+// Package k8s manages the throwaway pods that back k8s-mode shell sessions.
 package k8s
 
 import (
@@ -18,29 +19,37 @@ import (
 )
 
 const (
+	// Namespace holds every visitor pod
 	Namespace = "public-sessions"
+	// ImageName is the guest image built from manifests/docker/Dockerfile.guest
 	ImageName = "portfolio-guest:latest"
+
+	// maxSessionSeconds is a hard lifetime for visitor pods, so pods the
+	// backend failed to delete (e.g. it crashed) still go away on their own
+	maxSessionSeconds = 30 * 60
 )
 
+// Client creates, execs into and deletes visitor pods
 type Client struct {
 	clientset *kubernetes.Clientset
 	config    *rest.Config
 	logger    *logrus.Logger
 }
 
+// PodExecOptions are the streams and command for ExecInPod
 type PodExecOptions struct {
-	Command   []string
-	Stdin     io.Reader
-	Stdout    io.Writer
-	Stderr    io.Writer
-	TTY       bool
+	Command []string
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
+	TTY     bool
 }
 
-func NewClient() (*Client, error) {
-	// Try in-cluster config first, then kubeconfig
+// NewClient connects using the in-cluster config, falling back to
+// ~/.kube/config for local development
+func NewClient(logger *logrus.Logger) (*Client, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		// Fallback to kubeconfig for local development
 		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create kubernetes config: %w", err)
@@ -52,9 +61,6 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	logger := logrus.New()
-	logger.SetLevel(logrus.InfoLevel)
-
 	return &Client{
 		clientset: clientset,
 		config:    config,
@@ -62,36 +68,38 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-func (c *Client) CreateTerminalPod(sessionID string) (*corev1.Pod, error) {
+// CreateTerminalPod starts a locked-down pod for one session and waits until it is running
+func (c *Client) CreateTerminalPod(ctx context.Context, sessionID string) (*corev1.Pod, error) {
 	podName := fmt.Sprintf("terminal-%s", sessionID)
-	
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: Namespace,
 			Labels: map[string]string{
-				"app":        "portfolio-terminal",
+				"app":        "portfolio-session",
 				"session-id": sessionID,
 			},
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:                corev1.RestartPolicyNever,
+			ActiveDeadlineSeconds:        ptr(int64(maxSessionSeconds)),
+			AutomountServiceAccountToken: ptr(false),
 			SecurityContext: &corev1.PodSecurityContext{
-				RunAsNonRoot: &[]bool{true}[0],
-				RunAsUser:    &[]int64{1000}[0],
-				FSGroup:      &[]int64{1000}[0],
+				RunAsNonRoot: ptr(true),
+				RunAsUser:    ptr(int64(1000)),
+				FSGroup:      ptr(int64(1000)),
 			},
 			Containers: []corev1.Container{
 				{
-					Name:  "terminal",
-					Image: ImageName,
+					Name:    "terminal",
+					Image:   ImageName,
 					Command: []string{"/bin/sh"},
 					Args:    []string{"-c", "while true; do sleep 30; done"},
 					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: &[]bool{false}[0],
-						RunAsNonRoot:             &[]bool{true}[0],
-						RunAsUser:                &[]int64{1000}[0],
-						ReadOnlyRootFilesystem:   &[]bool{true}[0],
+						AllowPrivilegeEscalation: ptr(false),
+						RunAsNonRoot:             ptr(true),
+						RunAsUser:                ptr(int64(1000)),
+						ReadOnlyRootFilesystem:   ptr(true),
 						Capabilities: &corev1.Capabilities{
 							Drop: []corev1.Capability{"ALL"},
 						},
@@ -107,15 +115,8 @@ func (c *Client) CreateTerminalPod(sessionID string) (*corev1.Pod, error) {
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "portfolio-content",
-							MountPath: "/home/portfoliouser",
-							ReadOnly:  true,
-						},
-						{
-							Name:      "tmp",
-							MountPath: "/tmp",
-						},
+						{Name: "portfolio-content", MountPath: "/home/portfoliouser", ReadOnly: true},
+						{Name: "tmp", MountPath: "/tmp"},
 					},
 					WorkingDir: "/home/portfoliouser",
 				},
@@ -125,48 +126,34 @@ func (c *Client) CreateTerminalPod(sessionID string) (*corev1.Pod, error) {
 					Name: "portfolio-content",
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "portfolio-content",
-							},
+							LocalObjectReference: corev1.LocalObjectReference{Name: "portfolio-content"},
 						},
 					},
 				},
 				{
-					Name: "tmp",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
+					Name:         "tmp",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
 		},
 	}
 
-	_, err := c.clientset.CoreV1().Pods(Namespace).Create(
-		context.TODO(),
-		pod,
-		metav1.CreateOptions{},
-	)
-	if err != nil {
+	if _, err := c.clientset.CoreV1().Pods(Namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		return nil, fmt.Errorf("failed to create pod: %w", err)
 	}
-
 	c.logger.WithFields(logrus.Fields{
 		"pod_name":   podName,
 		"session_id": sessionID,
 	}).Info("Created terminal pod")
 
-	// Wait for pod to be running
-	return c.waitForPodRunning(podName, 30*time.Second)
+	return c.waitForPodRunning(ctx, podName)
 }
 
-func (c *Client) DeletePod(podName string) error {
-	err := c.clientset.CoreV1().Pods(Namespace).Delete(
-		context.TODO(),
-		podName,
-		metav1.DeleteOptions{
-			GracePeriodSeconds: &[]int64{0}[0], // Force immediate deletion
-		},
-	)
+// DeletePod removes a pod immediately
+func (c *Client) DeletePod(ctx context.Context, podName string) error {
+	err := c.clientset.CoreV1().Pods(Namespace).Delete(ctx, podName, metav1.DeleteOptions{
+		GracePeriodSeconds: ptr(int64(0)),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete pod %s: %w", podName, err)
 	}
@@ -175,7 +162,8 @@ func (c *Client) DeletePod(podName string) error {
 	return nil
 }
 
-func (c *Client) ExecInPod(podName string, options PodExecOptions) error {
+// ExecInPod runs a command in the pod and streams its I/O until it exits or ctx is cancelled
+func (c *Client) ExecInPod(ctx context.Context, podName string, options PodExecOptions) error {
 	req := c.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
@@ -195,7 +183,7 @@ func (c *Client) ExecInPod(podName string, options PodExecOptions) error {
 		return fmt.Errorf("failed to create executor: %w", err)
 	}
 
-	return exec.Stream(remotecommand.StreamOptions{
+	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  options.Stdin,
 		Stdout: options.Stdout,
 		Stderr: options.Stderr,
@@ -203,33 +191,31 @@ func (c *Client) ExecInPod(podName string, options PodExecOptions) error {
 	})
 }
 
-func (c *Client) waitForPodRunning(podName string, timeout time.Duration) (*corev1.Pod, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+// waitForPodRunning polls until the pod is running, fails, or ctx expires
+func (c *Client) waitForPodRunning(ctx context.Context, podName string) (*corev1.Pod, error) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 
 	for {
+		pod, err := c.clientset.CoreV1().Pods(Namespace).Get(ctx, podName, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pod %s: %w", podName, err)
+		}
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			return pod, nil
+		case corev1.PodFailed:
+			return nil, fmt.Errorf("pod %s failed to start", podName)
+		}
+
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("timeout waiting for pod %s to be running", podName)
-		default:
-			pod, err := c.clientset.CoreV1().Pods(Namespace).Get(
-				context.TODO(),
-				podName,
-				metav1.GetOptions{},
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get pod %s: %w", podName, err)
-			}
-
-			if pod.Status.Phase == corev1.PodRunning {
-				return pod, nil
-			}
-
-			if pod.Status.Phase == corev1.PodFailed {
-				return nil, fmt.Errorf("pod %s failed to start", podName)
-			}
-
-			time.Sleep(1 * time.Second)
+			return nil, fmt.Errorf("timeout waiting for pod %s to be running: %w", podName, ctx.Err())
+		case <-ticker.C:
 		}
 	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

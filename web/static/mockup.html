@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gateway Mockup</title>
+<style>
+  :root {
+    --bg: #05080f;
+    --panel: #0b1322;
+    --panel-2: #0f1a2e;
+    --line: #1d3557;
+    --cyan: #5fd3ff;
+    --text: #b9d6ee;
+    --dim: #5b7a99;
+    --red: #ff5c5c;
+    --amber: #ffb84d;
+    --green: #6dffa8;
+    --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 var(--mono);
+    overflow-x: hidden;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* scanlines over everything, very faint */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+  }
+
+  .mock-badge {
+    position: fixed; bottom: 8px; right: 8px; z-index: 50;
+    background: var(--amber); color: #000; padding: 2px 8px; font-weight: 700; font-size: 11px;
+  }
+
+  /* ---------- boot: password breaker ---------- */
+  #boot {
+    position: fixed; inset: 0; z-index: 100; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    cursor: pointer; transition: opacity .35s;
+  }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  .boot-label { color: var(--dim); letter-spacing: .3em; font-size: 11px; }
+  #crack { display: flex; gap: 4px; }
+  #crack span {
+    width: 28px; height: 40px; display: grid; place-items: center;
+    border: 1px solid var(--line); background: var(--panel);
+    font-size: 22px; color: var(--dim);
+  }
+  #crack span.locked { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px rgba(95,211,255,.35); }
+  #crack span.gap { border: none; background: none; width: 14px; }
+  #boot-status { color: var(--amber); font-size: 12px; min-height: 1.5em; }
+  .skip { color: var(--dim); font-size: 11px; }
+
+  /* ---------- layout ---------- */
+  .app { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; gap: 10px; padding: 10px; }
+
+  header.hud {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+    border: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    padding: 10px 14px;
+  }
+  .who h1 { font-size: 20px; color: #fff; letter-spacing: .08em; }
+  .who p { color: var(--cyan); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn {
+    border: 1px solid var(--line); padding: 4px 10px; color: var(--text); background: var(--panel);
+    font: inherit; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--cyan); color: var(--cyan); text-decoration: none; }
+  .btn.primary { border-color: var(--cyan); color: var(--cyan); }
+  .clock { margin-left: auto; text-align: right; color: var(--dim); font-size: 12px; }
+  .clock b { color: var(--text); font-size: 15px; display: block; }
+
+  main { display: grid; grid-template-columns: 260px 1fr 260px; gap: 10px; min-height: 0; }
+
+  .panel { border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .panel h2 {
+    font-size: 11px; letter-spacing: .25em; color: var(--dim); font-weight: 400;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+    display: flex; justify-content: space-between;
+  }
+  .panel .body { padding: 10px; overflow: auto; }
+
+  /* remote systems = projects */
+  .sys { padding: 8px; border: 1px solid transparent; cursor: pointer; margin-bottom: 4px; }
+  .sys:hover, .sys.active { border-color: var(--cyan); background: rgba(95,211,255,.06); }
+  .sys .name { color: #fff; }
+  .sys .ip { color: var(--dim); font-size: 11px; }
+  .sys .tag { color: var(--green); font-size: 11px; }
+  .sys.locked .tag { color: var(--amber); }
+
+  /* map */
+  .map-wrap { position: relative; flex: 1; min-height: 260px; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .route-line { fill: none; stroke: var(--cyan); stroke-width: 1.5; stroke-dasharray: 6 5; animation: flow 1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -11; } }
+  .node circle { fill: var(--bg); stroke: var(--cyan); stroke-width: 1.5; }
+  .node.you circle { stroke: var(--amber); }
+  .node text { fill: var(--text); font: 10px var(--mono); }
+  .route-legend { padding: 6px 10px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+  .route-legend b { color: var(--cyan); font-weight: 400; }
+
+  /* status / trace */
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin-bottom: 14px; }
+  .kv dt { color: var(--dim); }
+  .kv dd { color: #fff; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meter-label { display: flex; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 4px; }
+  .meter { height: 8px; border: 1px solid var(--line); margin-bottom: 14px; }
+  .meter i { display: block; height: 100%; background: var(--cyan); transition: width .8s; }
+  .meter.trace i { background: var(--red); }
+  .contract { border: 1px dashed var(--amber); padding: 8px; color: var(--amber); font-size: 12px; }
+  .contract b { display: block; color: #fff; margin-bottom: 4px; }
+
+  /* console */
+  .console { border: 1px solid var(--line); background: #03060b; }
+  .console h2 { font-size: 11px; letter-spacing: .25em; color: var(--dim); font-weight: 400; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  #out { height: 170px; overflow: auto; padding: 8px 10px; white-space: pre-wrap; }
+  #out .c { color: var(--cyan); }
+  #out .w { color: var(--amber); }
+  #out .e { color: var(--red); }
+  .inrow { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); }
+  .prompt { color: var(--cyan); white-space: nowrap; }
+  #cmd { flex: 1; background: none; border: none; outline: none; color: #fff; font: inherit; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; }
+
+  /* responsive: stack on narrow screens */
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+    .map-wrap { min-height: 220px; }
+    .clock { margin-left: 0; text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mock-badge">MOCKUP · fake data</div>
+
+<!-- Boot: password-breaker effect, skippable -->
+<div id="boot" title="Click to skip">
+  <div class="boot-label">PASSWORD BREAKER v1.0 — DECRYPTING IDENTITY</div>
+  <div id="crack"></div>
+  <div id="boot-status">&nbsp;</div>
+  <div class="skip">click or press any key to skip</div>
+</div>
+
+<div class="app">
+  <!-- HUD: the part HR reads. Plain, visible, no typing needed -->
+  <header class="hud">
+    <div class="who">
+      <h1>BARRY PEKERMAN</h1>
+      <p>Junior DevOps Engineer · AWS SA Associate · Israel</p>
+    </div>
+    <nav class="links">
+      <a class="btn primary" href="#">Download CV (PDF)</a>
+      <a class="btn" href="https://github.com/BarryPekerman" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn" href="#">LinkedIn</a>
+      <a class="btn" href="#">Email</a>
+      <button class="btn" id="music" title="Ambient music (off by default)">♪ off</button>
+      <button class="btn" id="sfx" title="Sound effects (off by default)">sfx off</button>
+    </nav>
+    <div class="clock"><b id="clock">--:--:--</b>GATEWAY ONLINE · UTC</div>
+  </header>
+
+  <main>
+    <!-- Left: projects as remote systems -->
+    <section class="panel">
+      <h2><span>REMOTE SYSTEMS</span><span>4</span></h2>
+      <div class="body" id="systems"></div>
+    </section>
+
+    <!-- Center: request route (Uplink bounce map) -->
+    <section class="panel">
+      <h2><span>CONNECTION ROUTE</span><span id="route-name">this website</span></h2>
+      <div class="map-wrap">
+        <svg id="map" viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="route-legend" id="route-legend"></div>
+    </section>
+
+    <!-- Right: live status (trace tracker) + the "mission" -->
+    <section class="panel">
+      <h2><span>SYSTEM STATUS</span><span style="color:var(--green)">● LIVE</span></h2>
+      <div class="body">
+        <dl class="kv">
+          <dt>pod</dt><dd>portfolio-7f9c4-x2kqd</dd>
+          <dt>node</dt><dd>oci-k3s-arm-01</dd>
+          <dt>region</dt><dd>eu-frankfurt-1</dd>
+          <dt>commit</dt><dd>a1b2c3d</dd>
+          <dt>uptime</dt><dd id="uptime">3d 04:12:55</dd>
+          <dt>argocd</dt><dd style="color:var(--green)">Synced</dd>
+        </dl>
+        <div class="meter-label"><span>ACTIVE SESSIONS</span><span id="sess-n">3</span></div>
+        <div class="meter"><i id="sess" style="width:30%"></i></div>
+        <div class="meter-label"><span>TRACE</span><span id="trace-n">0%</span></div>
+        <div class="meter trace"><i id="trace" style="width:0%"></i></div>
+        <div class="contract">
+          <b>OPEN CONTRACT</b>
+          Seeking: Junior DevOps role, Tel Aviv / Haifa.<br>
+          Reward: an engineer who keeps clusters alive.<br>
+          <a href="#">accept contract →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Console: its own command set, not a fake bash -->
+  <section class="console">
+    <h2>GATEWAY CONSOLE</h2>
+    <div id="out"></div>
+    <div class="chips" id="chips"></div>
+    <div class="inrow">
+      <span class="prompt">gateway://barry &gt;</span>
+      <input id="cmd" autocomplete="off" spellcheck="false" aria-label="command">
+    </div>
+  </section>
+</div>
+
+<script>
+// ---------- mock data ----------
+const SYSTEMS = [
+  { id: 'okeguard', name: 'oke-version-guard', ip: '203.0.113.21', tag: 'OPEN',
+    text: 'Keeps a free-tier Oracle OKE cluster on a supported k8s version.\nWeekly GitHub Actions check, least-privilege OCI key, auto-upgrade\none minor at a time, node cycling with no surge, fails closed.',
+    route: ['you', 'gh', 'oci'] },
+  { id: 'chatops', name: 'terraform-aws-chatops', ip: '198.51.100.7', tag: 'OPEN',
+    text: 'Terraform module: manage AWS from Telegram.\nBot → webhook → GitHub Actions (OIDC). IAM can only destroy\nresources tagged ChatOpsManaged=true.',
+    route: ['you', 'tg', 'gh', 'aws'] },
+  { id: 'vagrant', name: 'k8s-cluster-vagrant', ip: '192.0.2.56', tag: 'OPEN',
+    text: '3-node kubeadm cluster on Vagrant VMs, provisioned with Ansible.\ncontainerd, Calico, kube-prometheus-stack.',
+    route: ['you', 'gh'] },
+  { id: 'sandbox', name: 'sandbox', ip: '203.0.113.66', tag: 'LOCKED · v2',
+    text: 'Real isolated shell, one pod per visitor (gVisor).\nUnder construction.', route: ['you', 'cf', 'oci'], locked: true },
+];
+
+// rough positions on a 600x300 "world"
+const NODES = {
+  you: { x: 352, y: 128, label: 'YOU (Israel)', you: true },
+  cf:  { x: 300, y: 92,  label: 'DNS / edge' },
+  oci: { x: 300, y: 78,  label: 'OCI Frankfurt · k3s' },
+  gh:  { x: 120, y: 98,  label: 'GitHub' },
+  aws: { x: 280, y: 70,  label: 'AWS eu-west-1' },
+  tg:  { x: 330, y: 64,  label: 'Telegram' },
+};
+const SITE_ROUTE = ['you', 'cf', 'oci'];
+
+// ---------- boot: password breaker ----------
+const NAME = 'BARRY PEKERMAN';
+const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&@';
+const crack = document.getElementById('crack');
+const cells = [...NAME].map(ch => {
+  const s = document.createElement('span');
+  if (ch === ' ') s.className = 'gap';
+  crack.appendChild(s);
+  return { el: s, ch, locked: ch === ' ' };
+});
+let bootDone = false;
+const spin = setInterval(() => {
+  cells.forEach(c => { if (!c.locked) c.el.textContent = GLYPHS[Math.random() * GLYPHS.length | 0]; });
+}, 45);
+cells.filter(c => !c.locked).forEach((c, i) => setTimeout(() => lock(c), 250 + i * 85));
+function lock(c) { c.locked = true; c.el.textContent = c.ch; c.el.classList.add('locked'); }
+setTimeout(() => { document.getElementById('boot-status').textContent = 'IDENTITY CONFIRMED · CONNECTION ESTABLISHED'; }, 1450);
+setTimeout(finishBoot, 1900);
+function finishBoot() {
+  if (bootDone) return;
+  bootDone = true;
+  clearInterval(spin);
+  document.getElementById('boot').classList.add('gone');
+  print('Connection established. Welcome, agent.', 'c');
+  print('Click a remote system on the left, or a command below.');
+}
+document.getElementById('boot').addEventListener('click', finishBoot);
+window.addEventListener('keydown', finishBoot, { once: true });
+
+// ---------- clock + uptime ----------
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toISOString().slice(11, 19);
+}, 1000);
+
+// ---------- map ----------
+const svg = document.getElementById('map');
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent = svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+// dot-matrix "continents" (very rough, it's a mood, not geography)
+const LAND = [
+  [60, 60, 120, 60], [100, 120, 50, 70], [150, 170, 40, 90],      // americas
+  [270, 50, 70, 40], [290, 110, 50, 100],                          // europe, africa
+  [340, 50, 170, 70], [400, 120, 60, 40], [470, 190, 50, 35],     // asia, india, oceania
+];
+for (let x = 10; x < 600; x += 9) for (let y = 10; y < 300; y += 9) {
+  if (LAND.some(([lx, ly, w, h]) => ((x - lx - w / 2) / (w / 2)) ** 2 + ((y - ly - h / 2) / (h / 2)) ** 2 < 1))
+    el('circle', { cx: x, cy: y, r: 1.2, fill: '#16304f' });
+}
+const routeLayer = el('g', {});
+const nodeLayer = el('g', {});
+function drawRoute(ids, label) {
+  routeLayer.innerHTML = ''; nodeLayer.innerHTML = '';
+  const pts = ids.map(id => NODES[id]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p.x + ' ' + p.y).join(' ');
+  el('path', { d, class: 'route-line' }, routeLayer);
+  pts.forEach((p, i) => {
+    const g = el('g', { class: 'node' + (p.you ? ' you' : '') }, nodeLayer);
+    el('circle', { cx: p.x, cy: p.y, r: 5 }, g);
+    const t = el('text', { x: p.x + 8, y: p.y - 8 + (i % 2) * 22 }, g);
+    t.textContent = p.label;
+  });
+  document.getElementById('route-name').textContent = label;
+  document.getElementById('route-legend').innerHTML =
+    'route: ' + ids.map(id => '<b>' + NODES[id].label + '</b>').join(' → ');
+}
+drawRoute(SITE_ROUTE, 'this website');
+
+// ---------- systems list ----------
+const sysBox = document.getElementById('systems');
+SYSTEMS.forEach(s => {
+  const d = document.createElement('div');
+  d.className = 'sys' + (s.locked ? ' locked' : '');
+  d.innerHTML = `<div class="name">${s.name}</div><div class="ip">${s.ip}</div><div class="tag">${s.tag}</div>`;
+  d.onclick = () => connect(s.id);
+  s.el = d;
+  sysBox.appendChild(d);
+});
+
+// ---------- console ----------
+const out = document.getElementById('out');
+function print(text, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  if (cls === 'e') Sfx.error();
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+let tracing = null;
+function connect(id) {
+  const s = SYSTEMS.find(x => x.id === id);
+  if (!s) { print(`connect: unknown host '${id}'`, 'e'); return; }
+  SYSTEMS.forEach(x => x.el.classList.toggle('active', x === s));
+  print(`> connect ${s.name}`, 'c');
+  drawRoute(s.route, s.name);
+  s.route.forEach((_, i) => setTimeout(() => Sfx.hop(i), i * 150));
+  print(`Bouncing via ${s.route.map(r => NODES[r].label).join(' → ')} ...`);
+  startTrace();
+  setTimeout(() => {
+    if (s.locked) { Sfx.denied(); print('Sandbox offline. Real isolated shells are under construction.', 'w'); return; }
+    Sfx.connected();
+    print(`Connected to ${s.ip}`, 'c');
+    s.text.split('\n').forEach(l => print('  ' + l));
+  }, 700);
+}
+function startTrace() {
+  clearInterval(tracing);
+  let p = 0;
+  tracing = setInterval(() => {
+    p = Math.min(p + 4, 100);
+    document.getElementById('trace').style.width = p + '%';
+    document.getElementById('trace-n').textContent = p + '%';
+    if (p % 20 === 0 && p < 100) Sfx.traceTick(p);
+    if (p === 100) { clearInterval(tracing); Sfx.alarm(); print('Trace complete. (Relax: it only traced you to this page.)', 'w'); }
+  }, 120);
+}
+const COMMANDS = {
+  help: () => print('commands: cv, projects, connect <system>, status, contact, clear'),
+  cv: () => print('[cv would print here, readable plain text, same as the PDF]'),
+  projects: () => SYSTEMS.forEach(s => print(`  ${s.name.padEnd(24)} ${s.ip.padEnd(15)} ${s.tag}`)),
+  status: () => print('pod portfolio-7f9c4-x2kqd · node oci-k3s-arm-01 · commit a1b2c3d · argocd Synced'),
+  contact: () => print('github.com/BarryPekerman · email/linkedin: TODO'),
+  clear: () => { out.innerHTML = ''; },
+};
+function run(line) {
+  const [name, ...args] = line.trim().split(/\s+/);
+  if (!name) return;
+  if (name === 'connect') { args[0] ? connect(args[0].replace('oke-version-guard', 'okeguard')) : print('usage: connect <system>', 'e'); return; }
+  print('> ' + line, 'c');
+  (COMMANDS[name] || (() => print(`${name}: unknown command. try 'help'`, 'e')))();
+}
+const cmd = document.getElementById('cmd');
+cmd.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { Sfx.enter(); run(cmd.value); cmd.value = ''; }
+  else if (e.key.length === 1 || e.key === 'Backspace') Sfx.key();
+});
+// ---------- sound effects: separate toggle, off by default ----------
+let sharedCtx = null;
+function audioContext() {
+  if (!sharedCtx) sharedCtx = new AudioContext();
+  return sharedCtx;
+}
+
+const Sfx = {
+  on: false, out: null, noiseBuf: null,
+
+  init() {
+    const ctx = audioContext();
+    this.out = ctx.createGain();
+    this.out.gain.value = 0.9;
+    this.out.connect(ctx.destination);
+    // one second of white noise, reused for clicks
+    this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  },
+
+  // a short tone, optionally sliding in pitch
+  tone(freq, dur, { type = 'square', vol = 0.05, delay = 0, slideTo } = {}) {
+    if (!this.on) return;
+    const ctx = audioContext();
+    const t = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g);
+    g.connect(this.out);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  },
+
+  // a filtered noise tick, like a keyboard click
+  tick(dur = 0.015, vol = 0.08) {
+    if (!this.on) return;
+    const ctx = audioContext();
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 3000;
+    const g = ctx.createGain();
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(hp); hp.connect(g); g.connect(this.out);
+    src.start(t, Math.random() * 0.9, dur + 0.01);
+  },
+
+  key()       { this.tick(0.012 + Math.random() * 0.01, 0.06 + Math.random() * 0.04); },
+  click()     { this.tone(1400, 0.03, { vol: 0.04 }); this.tone(900, 0.04, { vol: 0.03, delay: 0.03 }); },
+  enter()     { this.tone(520, 0.08, { vol: 0.04, slideTo: 780 }); },
+  hop(i)      { this.tone(660 + i * 220, 0.1, { vol: 0.04 }); },
+  connected() { this.tone(784, 0.08, { vol: 0.05 }); this.tone(1047, 0.14, { vol: 0.05, delay: 0.09 }); },
+  denied()    { this.tone(220, 0.25, { vol: 0.06, slideTo: 110 }); },
+  error()     { this.tone(140, 0.12, { vol: 0.06 }); this.tone(140, 0.12, { vol: 0.06, delay: 0.16 }); },
+  traceTick(p) { this.tone(300 + p * 6, 0.05, { type: 'sine', vol: 0.08 }); },
+  alarm()     { for (let i = 0; i < 6; i++) this.tone(i % 2 ? 660 : 880, 0.11, { vol: 0.045, delay: i * 0.13 }); },
+
+  toggle() {
+    if (!this.out) this.init();
+    audioContext().resume();
+    this.on = !this.on;
+    document.getElementById('sfx').textContent = this.on ? 'sfx on' : 'sfx off';
+    try { localStorage.setItem('sfx', this.on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+  },
+};
+document.getElementById('sfx').addEventListener('click', () => Sfx.toggle());
+// one click sound for every button and system entry
+document.addEventListener('click', e => { if (e.target.closest('.btn, .sys')) Sfx.click(); });
+try {
+  if (localStorage.getItem('sfx') === 'on') document.getElementById('sfx').textContent = 'sfx off (click to resume)';
+} catch (e) { /* storage blocked */ }
+
+// ---------- ambient music: generated live, off by default ----------
+// A slow minor progression (Am - Fmaj7 - Dm - E) on detuned saw pads through
+// a low-pass filter and echo, a soft low pulse, and sparse bell notes.
+const Music = {
+  ctx: null, master: null, on: false, timer: null, step: 0,
+  CHORDS: [
+    [110.0, 130.8, 164.8, 220.0],  // Am
+    [87.31, 110.0, 130.8, 164.8],  // Fmaj7
+    [73.42, 146.8, 174.6, 220.0],  // Dm
+    [82.41, 207.7, 246.9, 329.6],  // E (the tense one)
+  ],
+  BAR: 6, // seconds per chord
+
+  init() {
+    const ctx = this.ctx = audioContext();
+    this.master = ctx.createGain();
+    this.master.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    const delay = ctx.createDelay();
+    delay.delayTime.value = 0.45;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.35;
+    this.master.connect(filter);
+    filter.connect(ctx.destination);
+    filter.connect(delay);
+    delay.connect(feedback);
+    feedback.connect(delay);
+    delay.connect(ctx.destination);
+  },
+
+  voice(freq, start, dur, type, peak, detune = 0) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.detune.value = detune;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(peak, start + Math.min(2, dur / 3));
+    g.gain.linearRampToValueAtTime(0, start + dur);
+    osc.connect(g);
+    g.connect(this.master);
+    osc.start(start);
+    osc.stop(start + dur + 0.1);
+  },
+
+  bar() {
+    const t = this.ctx.currentTime + 0.05;
+    const chord = this.CHORDS[this.step++ % this.CHORDS.length];
+    chord.forEach(f => {
+      this.voice(f, t, this.BAR + 1.5, 'sawtooth', 0.035, -7);
+      this.voice(f, t, this.BAR + 1.5, 'sawtooth', 0.035, +7);
+    });
+    for (let beat = 0; beat < this.BAR; beat += 1.5) {          // low pulse
+      this.voice(chord[0] / 2, t + beat, 0.9, 'sine', 0.12);
+    }
+    for (let i = 0; i < 3; i++) {                                 // sparse bells
+      if (Math.random() < 0.6) {
+        const f = chord[1 + (Math.random() * 3 | 0)] * 4;
+        this.voice(f, t + Math.random() * this.BAR, 1.6, 'triangle', 0.025);
+      }
+    }
+  },
+
+  toggle() {
+    if (!this.ctx) this.init();
+    this.on = !this.on;
+    const now = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setValueAtTime(this.master.gain.value, now);
+    if (this.on) {
+      this.ctx.resume();
+      this.master.gain.linearRampToValueAtTime(0.8, now + 2);   // fade in
+      this.bar();
+      this.timer = setInterval(() => this.bar(), this.BAR * 1000);
+    } else {
+      this.master.gain.linearRampToValueAtTime(0, now + 1);     // fade out
+      clearInterval(this.timer);
+    }
+    document.getElementById('music').textContent = this.on ? '♪ on' : '♪ off';
+    try { localStorage.setItem('music', this.on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+  },
+};
+document.getElementById('music').addEventListener('click', () => Music.toggle());
+// Browsers forbid sound before a user gesture, so a remembered "on" only shows as a hint
+try {
+  if (localStorage.getItem('music') === 'on') document.getElementById('music').textContent = '♪ off (click to resume)';
+} catch (e) { /* storage blocked */ }
+
+['help', 'cv', 'projects', 'status', 'connect sandbox'].forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'btn'; b.textContent = c;
+  b.onclick = () => run(c);
+  document.getElementById('chips').appendChild(b);
+});
+</script>
+</body>
+</html>

@@ -32,54 +32,28 @@ func NewLocalManager(logger *logrus.Logger, contentPath string) *LocalManager {
 func (m *LocalManager) CreateSession(sessionID string) (Session, error) {
 	m.logger.WithField("session_id", sessionID).Debug("Creating local shell session")
 
-	// Use bash for better features (history, tab completion)
-	// Try to find bash, fallback to sh
+	// Prefer bash (history, tab completion); fall back to sh
 	shellPath, err := exec.LookPath("bash")
-	var cmd *exec.Cmd
+	args := []string{"-i", "-l"}
 	if err != nil {
-		// Bash not found, use sh
-		shellPath = "/bin/sh"
-		m.logger.Debug("Bash not found, using /bin/sh")
-		cmd = exec.Command(shellPath, "-l")
-	} else {
-		m.logger.Debug("Using bash: " + shellPath)
-		// Use -i for interactive mode (enables aliases, history, etc.)
-		// Use -l for login shell (loads .profile/.bashrc)
-		cmd = exec.Command(shellPath, "-i", "-l")
+		shellPath, args = "/bin/sh", []string{"-l"}
 	}
-	
-	// Set working directory to content path
+
 	absContentPath, err := filepath.Abs(m.contentPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve content path: %w", err)
 	}
+
+	// Local mode deliberately runs the developer's own shell
+	cmd := exec.Command(shellPath, args...) // #nosec G204
 	cmd.Dir = absContentPath
-
-	// Create .bashrc if it doesn't exist
-	bashrcPath := filepath.Join(absContentPath, ".bashrc")
-	if _, err := os.Stat(bashrcPath); os.IsNotExist(err) {
-		// .bashrc will be created by the content/.bashrc file we provide
-	}
-
-	// Set environment variables for proper terminal behavior
-	env := os.Environ()
-	env = append(env,
+	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
 		"HOME="+absContentPath,
 		"USER=guest",
 		"SHELL="+shellPath,
 		"PS1=guest@portfolio:\\w\\$ ",
-		// Suppress sudo message
-		"SUDO_PS1=",
 	)
-	// Ensure bash loads .bashrc for interactive shells
-	if shellPath != "/bin/sh" {
-		env = append(env, "BASH_ENV="+bashrcPath)
-	}
-	cmd.Env = env
-	
-	// Suppress initial output by redirecting stderr temporarily
-	// The PTY will handle this, but we want clean startup
 
 	return &LocalSession{
 		cmd:    cmd,
@@ -136,13 +110,15 @@ func (s *LocalSession) Wait() error {
 
 // Close cleans up the PTY and terminates the process
 func (s *LocalSession) Close() error {
+	var err error
 	if s.ptmx != nil {
-		s.ptmx.Close()
+		err = s.ptmx.Close()
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		s.cmd.Process.Kill()
+		// The process may already have exited; that is fine
+		_ = s.cmd.Process.Kill()
 	}
-	return nil
+	return err
 }
 
 // Mode returns the session mode
