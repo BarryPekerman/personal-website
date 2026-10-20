@@ -2,33 +2,7 @@ BARRY PEKERMAN
 Junior DevOps Engineer · Israel
 github.com/BarryPekerman
 
-[DRAFT - review every line before publishing]
+The full CV is on its way. Until then:
 
-SUMMARY
--------
-DevOps bootcamp graduate (Infinity Labs, Haifa) and AWS Certified Solutions
-Architect - Associate. I build and run my own infrastructure: Kubernetes
-clusters, Terraform modules and GitOps pipelines, on AWS and Oracle Cloud.
-
-CERTIFICATIONS
---------------
-- AWS Certified Solutions Architect - Associate
-- In progress: LFCS, CKA
-
-SKILLS
-------
-Cloud:          AWS, Oracle Cloud (OCI/OKE)
-Containers:     Docker, Kubernetes (kubeadm, k3s, EKS, OKE), Helm, ArgoCD
-IaC & config:   Terraform, Ansible, Vagrant
-CI/CD:          GitHub Actions
-Monitoring:     Prometheus, Grafana
-Languages:      Python, Go, Bash
-Linux:          Arch, Ubuntu, Rocky
-
-EDUCATION
----------
-Infinity Labs R&D - DevOps program, Haifa
-
-TODO: add military service, dates, anything else true and relevant.
-
-Type 'projects' to see what I have built.
+  projects       what I have built (start here)
+  cat contact_info.md   how to reach me
