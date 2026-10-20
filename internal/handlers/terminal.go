@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -26,6 +27,12 @@ type clientMessage struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
 }
+
+// activeSessions counts the terminal sessions open right now
+var activeSessions atomic.Int64
+
+// ActiveSessions reports how many visitors have a terminal open
+func ActiveSessions() int64 { return activeSessions.Load() }
 
 // TerminalHandler handles WebSocket connections for terminal sessions
 type TerminalHandler struct {
@@ -76,6 +83,8 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 	log.WithField("mode", session.Mode()).Info("Shell session started")
+	activeSessions.Add(1)
+	defer activeSessions.Add(-1)
 
 	done := make(chan struct{})
 	defer close(done)
