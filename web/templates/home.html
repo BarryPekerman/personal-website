@@ -107,9 +107,6 @@
   .node.you circle { stroke: var(--amber); }
   .node circle.ping { fill: none; transform-box: fill-box; transform-origin: center; animation: ping 2.4s ease-out infinite; }
   @keyframes ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
-  .tunnel-link { fill: none; stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 2 4; opacity: .7; }
-  .node.tunnel circle { stroke-width: 1; }
-  .node.tunnel text { fill: var(--cyan); }
   .packet { stroke: none; }
   .packet.out { fill: var(--amber); }
   .packet.in { fill: var(--green); }
@@ -237,7 +234,7 @@
 <script src="/static/js/terminal.js?v=3"></script>
 <script src="/static/js/audio.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="/static/js/routemap.js?v=4"></script>
+<script src="/static/js/routemap.js?v=5"></script>
 <script>
 // ---------- projects: the files in content/projects, with their public repos ----------
 const SYSTEMS = [
@@ -344,14 +341,6 @@ function routeItem(title, detail) {
   return li;
 }
 
-// nearestLink is the tunnel connection closest to an edge (rough distance in degrees)
-function nearestLink(colo, links) {
-  const p = COLO_POS[colo];
-  if (!p || !links.length) return null;
-  const d = l => { const q = COLO_POS[l.colo]; return Math.hypot(q[0] - p[0], (q[1] - p[1]) * Math.cos(p[0] * Math.PI / 180)); };
-  return links.reduce((a, b) => d(b) < d(a) ? b : a);
-}
-
 async function refreshStatus() {
   try {
     const r = await fetch('/api/status', { cache: 'no-store' });
@@ -372,33 +361,26 @@ async function refreshStatus() {
     started = Date.parse(s.started);
     $('s-sessions').textContent = s.sessions;
 
-    // the tunnel: where cloudflared in the cluster is connected to Cloudflare
-    // right now. A request enters it at its own edge when that edge holds a
-    // connection; otherwise Cloudflare carries it on to one that does, which
-    // the origin isn't told: the map assumes the nearest.
-    const country = s.visitor.country, colo = s.visitor.colo;
-    const tunnel = (s.tunnel || []).filter(l => COLO_POS[l.colo]);
-    const mine = tunnel.find(l => l.colo === colo);
-    const via = mine || nearestLink(colo, tunnel);
-    const conns = n => n + (n === 1 ? ' connection' : ' connections');
-    let tunnelDetail = 'cloudflared in the cluster; no open ports';
-    if (mine) tunnelDetail = `${colo} holds ${conns(mine.connections)} of the tunnel: your request goes straight in`;
-    else if (via && colo) tunnelDetail = `no tunnel connection at ${colo}: Cloudflare carries it on, most likely to ${via.colo} (nearest)`;
-    const route = $('route');
-    route.replaceChildren(
-      routeItem('you' + (country ? ' · ' + country : ''), 'your browser'),
-      routeItem('Cloudflare' + (colo ? ' · ' + colo : ''), 'edge location that took your request'),
-      routeItem('tunnel' + (tunnel.length ? ' · ' + tunnel.map(l => `${l.colo} ×${l.connections}`).join(', ') : ''), tunnelDetail),
-      routeItem('OKE' + (s.region ? ' · ' + s.region : ''), 'pod ' + (s.pod || 'local') + ', node ' + (s.node || 'n/a')),
-    );
-
-    const hops = [
-      { pos: COUNTRY_POS[country] || null, label: 'you · ' + (country || '?'), you: true },
-      { pos: COLO_POS[colo] || null, label: 'Cloudflare · ' + (colo || '?') },
-    ];
-    if (via && !mine) hops.push({ pos: COLO_POS[via.colo], label: 'tunnel · ' + via.colo });
-    hops.push({ pos: REGION_POS[s.region] || null, label: 'OKE · ' + (s.region || '?') });
-    routeMap.draw(hops, tunnel.map(l => ({ pos: COLO_POS[l.colo], label: `tunnel · ${l.colo} ×${l.connections}` })));
+    // the route, worked out by the server: country -> the edge that took the
+    // request -> (when the tunnel has no connection there) the edge Cloudflare
+    // most likely carries it on to -> the cluster
+    const route = s.route || [];
+    const detail = {
+      you: () => 'your browser',
+      edge: h => h.tunnel
+        ? 'Cloudflare edge that took your request; the tunnel connects here, so it goes straight in'
+        : 'Cloudflare edge that took your request',
+      forward: h => `the tunnel has no connection at ${route[1].label}: Cloudflare carries it on, most likely to ${h.label} (nearest)`,
+      cluster: () => 'pod ' + (s.pod || 'local') + ', node ' + (s.node || 'n/a'),
+    };
+    const title = {
+      you: h => 'you' + (h.label ? ' · ' + h.label : ''),
+      edge: h => 'Cloudflare' + (h.label ? ' · ' + h.label : ''),
+      forward: h => 'Cloudflare · ' + h.label,
+      cluster: h => 'OKE' + (h.label ? ' · ' + h.label : ''),
+    };
+    $('route').replaceChildren(...route.map(h => routeItem(title[h.kind](h), detail[h.kind](h))));
+    routeMap.draw(route.map(h => ({ pos: h.pos, label: title[h.kind](h), you: h.kind === 'you' })));
 
     $('seats').textContent = s.handover
       ? `${s.handover.players} / ${s.handover.max} seats taken right now`
