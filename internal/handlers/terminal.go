@@ -17,6 +17,10 @@ import (
 // maxMessageSize caps a single WebSocket message (one keystroke or a paste)
 const maxMessageSize = 4096
 
+// pingInterval keeps idle sessions alive: Cloudflare closes a WebSocket after
+// 100 seconds with no traffic, so a visitor who stops to read would be dropped
+const pingInterval = 30 * time.Second
+
 // clientMessage is what the browser sends: {"type": "input"|"resize", "data": "..."}
 type clientMessage struct {
 	Type string `json:"type"`
@@ -73,8 +77,29 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	}
 	log.WithField("mode", session.Mode()).Info("Shell session started")
 
+	done := make(chan struct{})
+	defer close(done)
+	go h.keepAlive(ws, done)
+
 	go h.pumpInput(ws, session, log)
 	h.pumpOutput(ws, session, log)
+}
+
+// keepAlive pings the browser until done is closed. WriteControl is safe to
+// call alongside pumpOutput's writes.
+func (h *TerminalHandler) keepAlive(ws *websocket.Conn, done <-chan struct{}) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+				return
+			}
+		}
+	}
 }
 
 // pumpInput forwards browser messages to the shell until the connection closes
