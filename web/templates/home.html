@@ -145,6 +145,44 @@
     .center { order: -1; grid-template-rows: 220px min(70vh, 620px); }
     .clock { margin-left: 0; text-align: left; }
   }
+  /* ---------- phone: its own layout, no terminal ----------
+     A phone gets a readable page (name, CV, projects as text, live status and
+     the route map); the HUD and the terminal are for a screen and a keyboard */
+  .phone { display: none; padding: 14px 16px 28px; }
+  .phone section, .phone details { border: 1px solid var(--line); background: var(--panel); margin-bottom: 12px; }
+  .phone .head h1 { font-size: 22px; color: #fff; letter-spacing: .08em; }
+  .phone .head p { color: var(--cyan); margin-bottom: 12px; }
+  .phone .head .links { margin-bottom: 14px; }
+  .phone .btn { padding: 8px 14px; }
+  .phone h2 {
+    font-size: 11px; letter-spacing: .25em; color: var(--dim); font-weight: 400;
+    padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between;
+  }
+  .phone .strip { padding: 10px 12px; font-size: 12px; line-height: 1.7; }
+  .phone .strip b { color: #fff; font-weight: 400; }
+  .phone .p-map { height: 190px; position: relative; }
+  .phone .p-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .phone .p-route { padding: 8px 12px 10px; font-size: 12px; color: var(--text); border-top: 1px solid var(--line); }
+  .phone details summary { list-style: none; cursor: pointer; padding: 12px; }
+  .phone details summary::-webkit-details-marker { display: none; }
+  .phone details summary .name { color: #fff; display: flex; justify-content: space-between; gap: 8px; }
+  .phone details summary .name::after { content: "+"; color: var(--cyan); }
+  .phone details[open] summary .name::after { content: "−"; }
+  .phone details summary .gist { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .phone details[open] summary .gist { display: none; }
+  .phone details .text { padding: 0 12px 14px; font-size: 13px; line-height: 1.6; }
+  .phone .text h4 { color: var(--amber); font-weight: 400; letter-spacing: .15em; font-size: 11px; margin: 14px 0 6px; }
+  .phone .text p { margin-bottom: 8px; }
+  .phone .text ul { padding-left: 16px; margin-bottom: 8px; }
+  .phone .text li { margin-bottom: 4px; }
+  .phone .text .stack { color: var(--dim); font-size: 12px; }
+  .phone .text a, .phone .strip a { word-break: break-all; }
+  .phone .contract { margin-bottom: 12px; }
+  .phone .foot { color: var(--dim); font-size: 12px; text-align: center; margin-top: 18px; }
+  @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+    .app { display: none; }
+    .phone { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -230,6 +268,47 @@
   </main>
 </div>
 
+<!-- Phone layout (see the CSS): the same facts, as a page to read -->
+<div class="phone">
+  <div class="head">
+    <h1>BARRY PEKERMAN</h1>
+    <p>DevOps Engineer · AWS SA Associate · Israel</p>
+    <nav class="links">
+      <button class="btn primary" id="p-cv-btn">CV</button>
+      <a class="btn" href="https://github.com/BarryPekerman" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn" href="https://play.barrypekerman.com/" target="_blank" rel="noopener">The Handover</a>
+    </nav>
+  </div>
+
+  <section>
+    <h2><span>CONNECTION ROUTE</span><span id="p-live" class="stale">● …</span></h2>
+    <div class="p-map"><svg id="p-map" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of your route to this server"></svg></div>
+    <div class="p-route" id="p-route">…</div>
+    <div class="strip" id="p-strip"></div>
+  </section>
+
+  <h2 style="border:0;padding:6px 0">PROJECTS</h2>
+  <div id="p-projects"></div>
+
+  <details id="p-cv">
+    <summary><div class="name">CV &amp; contact</div><div class="gist">The full CV is on its way</div></summary>
+    <div class="text" id="p-cv-text"></div>
+  </details>
+
+  <div class="contract">
+    <b>THE HANDOVER</b>
+    A live CTF: each player gets a real, isolated Linux shell.<br>
+    <span class="seats" id="p-seats">checking seats…</span><br>
+    <a href="https://play.barrypekerman.com/" target="_blank" rel="noopener">enter the game →</a>
+  </div>
+  <div class="contract">
+    <b>OPEN CONTRACT</b>
+    Seeking: DevOps / platform engineering role, Israel (Tel Aviv / Haifa area).
+  </div>
+
+  <p class="foot">On a laptop, this page is a terminal you can explore: <a href="/terminal">open it here</a></p>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
@@ -247,20 +326,33 @@ const SYSTEMS = [
   { file: 'portfolio-terminal.md',    name: 'portfolio-terminal',    link: 'https://github.com/BarryPekerman/personal-website', label: 'repo' },
 ];
 
-// ---------- map: created first, the terminal reports traffic to it ----------
-const routeMap = new RouteMap(document.getElementById('map'));
+const $ = id => document.getElementById(id);
 
-// ---------- terminal ----------
-const terminal = new PortfolioTerminal(document.getElementById('terminal'), {
-  fontSize: 13,
-  fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
-  theme: { background: '#03060b', foreground: '#b9d6ee', cursor: '#5fd3ff', selectionBackground: '#1d3557' },
-  onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); routeMap.packet('out'); },
-  onOutput: () => routeMap.packet('in'),
-});
+// A phone gets its own layout (see the CSS) and no terminal: the same media
+// query decides both
+const PHONE = matchMedia('(max-width: 700px), (max-height: 500px) and (pointer: coarse)');
+
+// ---------- maps: the terminal reports its traffic to the desktop one ----------
+const routeMap = new RouteMap($('map'));
+const phoneMap = new RouteMap($('p-map'));
+
+// ---------- terminal: desktop only, started when the desktop layout shows ----------
+let terminal = null;
+function initDesktop() {
+  if (terminal || PHONE.matches) return;
+  terminal = new PortfolioTerminal($('terminal'), {
+    fontSize: 13,
+    fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
+    theme: { background: '#03060b', foreground: '#b9d6ee', cursor: '#5fd3ff', selectionBackground: '#1d3557' },
+    onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); routeMap.packet('out'); },
+    onOutput: () => routeMap.packet('in'),
+  });
+}
+initDesktop();
+PHONE.addEventListener('change', initDesktop);
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-run]');
-  if (b) terminal.run(b.dataset.run);
+  if (b && terminal) terminal.run(b.dataset.run);
 });
 ['help', 'cv', 'projects', 'contact', 'clear'].forEach(c => {
   const b = document.createElement('button');
@@ -286,7 +378,7 @@ SYSTEMS.forEach(s => {
   d.onclick = () => {
     sysBox.querySelectorAll('.sys').forEach(x => x.classList.toggle('active', x === d));
     Sfx.connected();
-    terminal.run('cat ~/projects/' + s.file);
+    if (terminal) terminal.run('cat ~/projects/' + s.file);
   };
   sysBox.appendChild(d);
 });
@@ -314,7 +406,7 @@ function finishBoot() {
   bootDone = true;
   clearInterval(spin);
   document.getElementById('boot').classList.add('gone');
-  terminal.term.focus();
+  if (terminal) terminal.term.focus();
 }
 document.getElementById('boot').addEventListener('click', finishBoot);
 window.addEventListener('keydown', finishBoot, { once: true });
@@ -325,7 +417,6 @@ setInterval(() => {
 }, 1000);
 
 // ---------- status: /api/status, refreshed every 15 s ----------
-const $ = id => document.getElementById(id);
 let started = null;
 function fmtUptime(ms) {
   const s = Math.max(0, ms / 1000 | 0);
@@ -344,6 +435,8 @@ function routeItem(title, detail) {
 }
 
 async function refreshStatus() {
+  // on the phone the status request is the traffic: it's drawn going out and back
+  phoneMap.packet('out');
   try {
     const r = await fetch('/api/status', { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
@@ -382,18 +475,133 @@ async function refreshStatus() {
       cluster: h => 'OKE' + (h.label ? ' · ' + h.label : ''),
     };
     $('route').replaceChildren(...route.map(h => routeItem(title[h.kind](h), detail[h.kind](h))));
-    routeMap.draw(route.map(h => ({ pos: h.pos, label: title[h.kind](h), you: h.kind === 'you' })));
+    const hops = route.map(h => ({ pos: h.pos, label: title[h.kind](h), you: h.kind === 'you' }));
+    routeMap.draw(hops);
+    phoneMap.draw(hops);
+    phoneMap.packet('in');
+    $('p-route').textContent = route.map(h => title[h.kind](h)).join('  →  ');
+    const strip = $('p-strip');
+    strip.replaceChildren();
+    const line = (label, value) => {
+      const d = document.createElement('div');
+      d.append(label + ' ');
+      const b = document.createElement('b');
+      if (value instanceof Node) b.append(value); else b.textContent = value;
+      d.append(b);
+      strip.append(d);
+    };
+    line('served by pod', s.pod || 'local');
+    line('on', 'OKE ' + (s.region || '') + ', node ' + (s.node || 'n/a'));
+    line('built from', c.firstChild ? c.firstChild.cloneNode(true) : s.commit);
+    $('p-seats').textContent = s.handover
+      ? `${s.handover.players} / ${s.handover.max} seats taken right now`
+      : 'seat count unavailable';
 
     $('seats').textContent = s.handover
       ? `${s.handover.players} / ${s.handover.max} seats taken right now`
       : 'seat count unavailable';
-    $('live').textContent = '● LIVE'; $('live').className = 'live';
+    for (const id of ['live', 'p-live']) { $(id).textContent = '● LIVE'; $(id).className = 'live'; }
   } catch (e) {
-    $('live').textContent = '● OFFLINE'; $('live').className = 'stale';
+    for (const id of ['live', 'p-live']) { $(id).textContent = '● OFFLINE'; $(id).className = 'stale'; }
   }
 }
 refreshStatus();
 setInterval(refreshStatus, 15000);
+
+// ---------- phone: projects and CV as text, from the files the terminal shows ----------
+async function contentText(path) {
+  const r = await fetch('/api/content/' + path);
+  if (!r.ok) throw new Error(r.status);
+  return r.text();
+}
+
+// appendText adds text to an element, with URLs as links
+function appendText(el, text) {
+  for (const part of text.split(/(https?:\/\/\S+)/)) {
+    if (/^https?:\/\//.test(part)) {
+      const a = document.createElement('a');
+      a.href = part; a.target = '_blank'; a.rel = 'noopener'; a.textContent = part;
+      el.append(a);
+    } else if (part) el.append(part);
+  }
+}
+
+// renderText turns a terminal write-up (hard-wrapped at 80 columns, HEADINGS
+// underlined with dashes, "- " bullets) into paragraphs that wrap on a phone
+function renderText(text, box) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  let para = null, list = null, item = null;
+  const add = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; box.append(e); return e; };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i], t = l.trim();
+    if (!t || /^# /.test(l)) { para = list = item = null; continue; }
+    if (/^-{3,}$/.test((lines[i + 1] || '').trim())) {
+      para = list = item = null;
+      add('h4').textContent = t; i++;
+      continue;
+    }
+    if (/^- /.test(l)) {
+      para = null;
+      if (!list) list = add('ul');
+      item = document.createElement('li'); appendText(item, t.slice(2)); list.append(item);
+      continue;
+    }
+    if (item && /^\s/.test(l)) { appendText(item, ' ' + t); continue; }
+    // "Key: value" lines (contact, STACK) stand alone
+    if (/^[A-Za-z][\w-]*( [\w-]+)?:\s/.test(t) || /^https?:\/\//.test(t)) {
+      list = item = null;
+      para = add('p', /^STACK:/.test(t) ? 'stack' : '');
+      appendText(para, t);
+      if (!/^STACK:/.test(t)) para = null;
+      continue;
+    }
+    list = item = null;
+    if (para) appendText(para, ' ' + t); else { para = add('p'); appendText(para, t); }
+  }
+}
+
+// gist is a write-up's first paragraph: under the title and its link
+function gist(text) {
+  const out = [];
+  for (const l of text.split('\n').slice(1)) {
+    const t = l.trim();
+    if (!t || /^https?:\/\//.test(t)) { if (out.length) break; continue; }
+    out.push(t);
+  }
+  return out.join(' ');
+}
+
+SYSTEMS.forEach(async s => {
+  const d = document.createElement('details');
+  const sum = document.createElement('summary');
+  const name = document.createElement('div'); name.className = 'name'; name.textContent = s.name;
+  const g = document.createElement('div'); g.className = 'gist';
+  sum.append(name, g);
+  const body = document.createElement('div'); body.className = 'text';
+  d.append(sum, body);
+  $('p-projects').append(d);
+  try {
+    const text = await contentText('projects/' + s.file);
+    g.textContent = gist(text);
+    renderText(text, body);
+  } catch (e) {
+    g.textContent = 'could not load this write-up';
+  }
+});
+
+(async () => {
+  const box = $('p-cv-text');
+  try {
+    const p = document.createElement('p');
+    p.textContent = 'The full CV is on its way. Until then, the projects above are the best summary of my work.';
+    box.append(p);
+    renderText(await contentText('contact_info.md'), box);
+  } catch (e) { /* the summary line still says the CV is coming */ }
+})();
+$('p-cv-btn').addEventListener('click', () => {
+  $('p-cv').open = true;
+  $('p-cv').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 </script>
 </body>
 </html>

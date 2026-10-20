@@ -66,6 +66,9 @@ func main() {
 	mux.HandleFunc("GET /terminal", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/templates/index.html")
 	})
+	// The same files the terminal shows, read-only, for the phone layout
+	// (which renders them as text instead of opening a terminal)
+	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", http.FileServerFS(content.FS)))
 	statusInfo := status.Info{
 		Pod:     os.Getenv("POD_NAME"),
 		Node:    os.Getenv("NODE_NAME"),
