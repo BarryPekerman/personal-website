@@ -133,14 +133,26 @@ class RouteMap {
   }
 
   // packet animates one real message along the route: 'out' is the
-  // visitor's keystroke going to the server, 'in' is the server's reply
+  // visitor's keystroke going to the server, 'in' is the server's reply. The
+  // real round trip takes milliseconds; drawn slowed down, a reply still
+  // can't set off before the keystroke behind it has arrived, so it waits for
+  // the last outgoing packet to reach the server.
   packet(direction) {
     if (!this.path || this.inFlight >= 8) return;
-    const path = this.path, len = path.getTotalLength();
-    const dot = this.el('circle', { r: 2.6, class: 'packet ' + direction }, this.nodeLayer);
-    const dur = 700;
-    let t0 = null;
+    const dur = 700, now = performance.now();
+    let delay = 0;
+    if (direction === 'out') this.outArrives = now + dur;
+    else delay = Math.max(0, (this.outArrives || 0) - now);
     this.inFlight++;
+    setTimeout(() => this.fly(direction, dur), delay);
+  }
+
+  fly(direction, dur) {
+    const path = this.path;
+    if (!path) { this.inFlight--; return; }
+    const len = path.getTotalLength();
+    const dot = this.el('circle', { r: 2.6, class: 'packet ' + direction }, this.nodeLayer);
+    let t0 = null;
     const step = ts => {
       if (t0 === null) t0 = ts;
       const f = Math.min(1, (ts - t0) / dur);
