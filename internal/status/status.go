@@ -20,6 +20,9 @@ type Info struct {
 	Region  string // where the cluster runs (REGION)
 	Commit  string // git commit baked in at build time
 	Started time.Time
+	// DevVisitor stands in for Cloudflare's headers when a request has none
+	// (local development only; behind Cloudflare every request has them)
+	DevVisitor Visitor
 }
 
 // Seats is The Handover's /healthz reply
@@ -70,12 +73,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Commit:   h.info.Commit,
 		Started:  h.info.Started,
 		Sessions: h.sessions(),
-		Visitor:  visitorFrom(r),
+		Visitor:  h.visitor(r),
 		Handover: h.seats.get(r.Context()),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) visitor(r *http.Request) Visitor {
+	if r.Header.Get("CF-Ray") == "" {
+		return h.info.DevVisitor
+	}
+	return visitorFrom(r)
 }
 
 func visitorFrom(r *http.Request) Visitor {

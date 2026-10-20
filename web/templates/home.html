@@ -94,6 +94,21 @@
   .sys .meta span { color: var(--green); }
   .hint { color: var(--dim); font-size: 11px; margin-top: 8px; }
 
+  /* center: map over terminal */
+  .center { display: grid; grid-template-rows: minmax(180px, 38%) 1fr; gap: 10px; min-height: 0; }
+  .map-wrap { position: relative; flex: 1; min-height: 0; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .route-line { fill: none; stroke: var(--cyan); stroke-width: 1.5; stroke-dasharray: 6 5; animation: flow 1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -11; } }
+  .node circle { fill: var(--bg); stroke: var(--cyan); stroke-width: 1.5; }
+  .node.you circle { stroke: var(--amber); }
+  .node circle.ping { fill: none; transform-box: fill-box; transform-origin: center; animation: ping 2.4s ease-out infinite; }
+  @keyframes ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+  .packet { stroke: none; }
+  .packet.out { fill: var(--amber); }
+  .packet.in { fill: var(--green); }
+  .node text { fill: var(--text); font: 10px var(--mono); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+
   /* terminal */
   .console { background: #03060b; }
   .term-wrap { flex: 1; min-height: 0; padding: 6px 0 0 8px; }
@@ -122,7 +137,7 @@
   @media (max-width: 980px) {
     .app { height: auto; min-height: 100vh; }
     main { grid-template-columns: 1fr; }
-    .console { order: -1; height: 70vh; }
+    .center { order: -1; grid-template-rows: 220px 70vh; }
     .clock { margin-left: 0; text-align: left; }
   }
 </style>
@@ -164,12 +179,20 @@
       </div>
     </section>
 
-    <!-- Center: the real terminal (server-side virtual shell over a WebSocket) -->
-    <section class="panel console">
-      <h2><span>TERMINAL</span><span>guest@barrypekerman.com</span></h2>
-      <div class="term-wrap"><div id="terminal" data-manual="1"></div></div>
-      <div class="chips" id="chips"></div>
-    </section>
+    <div class="center">
+      <!-- Your real route to this page: country -> Cloudflare edge -> the cluster -->
+      <section class="panel">
+        <h2><span>CONNECTION ROUTE</span><span>you → this pod</span></h2>
+        <div class="map-wrap"><svg id="map" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of your route to this server"></svg></div>
+      </section>
+
+      <!-- The real terminal (server-side virtual shell over a WebSocket) -->
+      <section class="panel console">
+        <h2><span>TERMINAL</span><span>guest@barrypekerman.com</span></h2>
+        <div class="term-wrap"><div id="terminal" data-manual="1"></div></div>
+        <div class="chips" id="chips"></div>
+      </section>
+    </div>
 
     <!-- Right: live facts about the deployment serving this page -->
     <section class="panel">
@@ -207,6 +230,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
 <script src="/static/js/terminal.js?v=3"></script>
 <script src="/static/js/audio.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="/static/js/routemap.js?v=1"></script>
 <script>
 // ---------- projects: the files in content/projects, with their public repos ----------
 const SYSTEMS = [
@@ -217,12 +242,16 @@ const SYSTEMS = [
   { file: 'portfolio-terminal.md',    name: 'portfolio-terminal',    link: 'https://github.com/BarryPekerman/personal-website', label: 'repo' },
 ];
 
+// ---------- map: created first, the terminal reports traffic to it ----------
+const routeMap = new RouteMap(document.getElementById('map'));
+
 // ---------- terminal ----------
 const terminal = new PortfolioTerminal(document.getElementById('terminal'), {
   fontSize: 13,
   fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
   theme: { background: '#03060b', foreground: '#b9d6ee', cursor: '#5fd3ff', selectionBackground: '#1d3557' },
-  onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); },
+  onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); routeMap.packet('out'); },
+  onOutput: () => routeMap.packet('in'),
 });
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-run]');
@@ -336,6 +365,13 @@ async function refreshStatus() {
       routeItem('tunnel → OKE' + (s.region ? ' · ' + s.region : ''), 'cloudflared in the cluster; no open ports'),
       routeItem('pod · ' + (s.pod || 'local'), 'this server, node ' + (s.node || 'n/a')),
     );
+
+    const country = s.visitor.country, colo = s.visitor.colo;
+    routeMap.draw([
+      { pos: COUNTRY_POS[country] || null, label: 'you · ' + (country || '?'), you: true },
+      { pos: COLO_POS[colo] || null, label: 'Cloudflare · ' + (colo || '?') },
+      { pos: REGION_POS[s.region] || null, label: 'OKE · ' + (s.region || '?') },
+    ]);
 
     $('seats').textContent = s.handover
       ? `${s.handover.players} / ${s.handover.max} seats taken right now`

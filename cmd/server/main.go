@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,6 +72,11 @@ func main() {
 		Region:  os.Getenv("REGION"),
 		Commit:  commit,
 		Started: time.Now().UTC(),
+	}
+	// DEV_VISITOR=IL/TLV previews the route map locally, where requests carry
+	// no Cloudflare headers
+	if country, colo, ok := strings.Cut(os.Getenv("DEV_VISITOR"), "/"); ok {
+		statusInfo.DevVisitor = status.Visitor{Country: country, Colo: colo}
 	}
 	handoverURL := os.Getenv("HANDOVER_HEALTHZ_URL")
 	if handoverURL == "" {

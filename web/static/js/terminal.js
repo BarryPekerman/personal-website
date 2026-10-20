@@ -2,7 +2,8 @@
 // server streams back, and every keystroke goes to the server as
 // {"type": "input", "data": ...}. The server owns echo, prompt and editing.
 class PortfolioTerminal {
-    constructor(element, { theme, fontSize = 14, fontFamily, onInput } = {}) {
+    constructor(element, { theme, fontSize = 14, fontFamily, onInput, onOutput } = {}) {
+        this.onOutput = onOutput;
         this.term = new Terminal({
             cursorBlink: true,
             cursorStyle: 'block',
@@ -41,6 +42,7 @@ class PortfolioTerminal {
         ws.onmessage = event => {
             // stream: true keeps multi-byte characters split across frames intact
             this.term.write(decoder.decode(event.data, { stream: true }));
+            if (this.onOutput) this.onOutput();
         };
         ws.onclose = () => this.term.write('\r\n\x1b[1;33mConnection closed. Reload to reconnect.\x1b[0m\r\n');
         ws.onerror = () => this.term.write('\r\n\x1b[1;31mConnection error.\x1b[0m\r\n');
