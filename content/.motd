@@ -1,6 +1,7 @@
- +--------------------------------------------------+
- |  PORTFOLIO NODE  ::  guest access granted        |
- +--------------------------------------------------+
+ +----------------------------------+
+ | PORTFOLIO NODE :: access granted |
+ +----------------------------------+
 
 Connection established. Welcome, guest.
-Type 'help' for commands, or 'cv' to read my CV.
+Type 'help' for commands,
+or 'cv' to read my CV.

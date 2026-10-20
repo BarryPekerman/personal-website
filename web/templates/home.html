@@ -98,7 +98,9 @@
   .hint { color: var(--dim); font-size: 11px; margin-top: 8px; }
 
   /* center: map over terminal */
-  .center { display: grid; grid-template-rows: minmax(180px, 38%) 1fr; gap: 10px; min-height: 0; }
+  /* the map's height is capped: on a tall window (a phone in desktop mode)
+     a share of the height would make it a poster */
+  .center { display: grid; grid-template-rows: minmax(180px, min(38%, 340px)) 1fr; gap: 10px; min-height: 0; }
   .map-wrap { position: relative; flex: 1; min-height: 0; }
   #map { position: absolute; inset: 0; width: 100%; height: 100%; }
   .route-line { fill: none; stroke: var(--cyan); stroke-width: 1.5; stroke-dasharray: 6 5; animation: flow 1s linear infinite; }
@@ -140,7 +142,7 @@
   @media (max-width: 980px) {
     .app { height: auto; min-height: 100vh; }
     main { grid-template-columns: minmax(0, 1fr); }
-    .center { order: -1; grid-template-rows: 220px 70vh; }
+    .center { order: -1; grid-template-rows: 220px min(70vh, 620px); }
     .clock { margin-left: 0; text-align: left; }
   }
 </style>
