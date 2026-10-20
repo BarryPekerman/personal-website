@@ -2,7 +2,9 @@
 // (their country -> the Cloudflare edge that took the request -> the cluster),
 // drawn on a dot-matrix world from Natural Earth's land outline. The view
 // zooms to fit the route. A hop whose location isn't known is left off the
-// map rather than guessed.
+// map rather than guessed. Tunnel links are the cluster's live connections to
+// Cloudflare (from cloudflared's metrics), drawn faintly from each edge
+// location to the cluster.
 
 // Rough centre of each country (lat, lon), by the ISO code in CF-IPCountry
 const COUNTRY_POS = {
@@ -55,6 +57,7 @@ class RouteMap {
     this.nodeLayer = this.el('g', {});
     this.rings = null;  // land polygons as [lon, lat] rings, with bounding boxes
     this.hops = [];
+    this.links = [];
     this.key = '';
     this.path = null;     // the drawn route, for packets to travel along
     this.inFlight = 0;
@@ -84,18 +87,20 @@ class RouteMap {
     } catch (e) { /* no land outline: the route still draws */ }
   }
 
-  // hops: [{ pos: [lat, lon] | null, label, you? }]; redraws only when they change
-  draw(hops) {
-    const key = JSON.stringify(hops);
+  // hops: [{ pos: [lat, lon] | null, label, you? }]; links: [{ pos, label }],
+  // each joined to the last hop (the cluster). Redraws only when they change.
+  draw(hops, links = []) {
+    const key = JSON.stringify([hops, links]);
     if (key === this.key) return;
     this.key = key;
     this.hops = hops;
+    this.links = links.filter(l => l.pos);
     this.render();
   }
 
   // the window (in degrees) that fits the known hops, at the map's aspect ratio
   view() {
-    const pts = this.hops.filter(h => h.pos).map(h => h.pos);
+    const pts = [...this.hops, ...this.links].filter(h => h.pos).map(h => h.pos);
     if (!pts.length) return { lon0: -180, lat1: 90, span: 360 };
     const lats = pts.map(p => p[0]), lons = pts.map(p => p[1]);
     const cLat = (Math.min(...lats) + Math.max(...lats)) / 2;
@@ -127,6 +132,18 @@ class RouteMap {
     this.nodeLayer.replaceChildren();
     const shown = this.hops.filter(h => h.pos);
     this.path = null;
+    // tunnel links under the route; a link at a hop's location gets no label
+    // of its own (the hop's label already names the place)
+    const end = shown.length && shown[shown.length - 1];
+    for (const l of end ? this.links : []) {
+      const [x, y] = px(l.pos), [ex, ey] = px(end.pos);
+      this.el('path', { d: `M${x} ${y} L${ex} ${ey}`, class: 'tunnel-link' }, this.routeLayer);
+      if (shown.some(h => h.pos[0] === l.pos[0] && h.pos[1] === l.pos[1])) continue;
+      const g = this.el('g', { class: 'node tunnel' }, this.nodeLayer);
+      this.el('circle', { cx: x, cy: y, r: 3 }, g);
+      const t = this.el('text', { x: x + 7, y: y + 12 }, g);
+      t.textContent = l.label;
+    }
     if (shown.length > 1) {
       const d = shown.map((h, i) => (i ? 'L' : 'M') + px(h.pos).join(' ')).join(' ');
       this.path = this.el('path', { d, class: 'route-line' }, this.routeLayer);

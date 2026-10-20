@@ -104,6 +104,9 @@
   .node.you circle { stroke: var(--amber); }
   .node circle.ping { fill: none; transform-box: fill-box; transform-origin: center; animation: ping 2.4s ease-out infinite; }
   @keyframes ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+  .tunnel-link { fill: none; stroke: var(--cyan); stroke-width: 1; opacity: .35; }
+  .node.tunnel circle { stroke-width: 1; opacity: .7; }
+  .node.tunnel text { fill: var(--dim); }
   .packet { stroke: none; }
   .packet.out { fill: var(--amber); }
   .packet.in { fill: var(--green); }
@@ -231,7 +234,7 @@
 <script src="/static/js/terminal.js?v=3"></script>
 <script src="/static/js/audio.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="/static/js/routemap.js?v=1"></script>
+<script src="/static/js/routemap.js?v=2"></script>
 <script>
 // ---------- projects: the files in content/projects, with their public repos ----------
 const SYSTEMS = [
@@ -358,20 +361,28 @@ async function refreshStatus() {
     started = Date.parse(s.started);
     $('s-sessions').textContent = s.sessions;
 
+    // the tunnel: where cloudflared in the cluster is connected to Cloudflare
+    // right now, and whether the edge that took this request is one of them
+    const country = s.visitor.country, colo = s.visitor.colo;
+    const tunnel = s.tunnel || [];
+    const mine = tunnel.find(l => l.colo === colo);
+    const conns = n => n + (n === 1 ? ' connection' : ' connections');
+    let tunnelDetail = 'cloudflared in the cluster; no open ports';
+    if (mine) tunnelDetail = `${colo} holds ${conns(mine.connections)} of the tunnel: your request goes straight in`;
+    else if (tunnel.length && colo) tunnelDetail = `no tunnel connection at ${colo}: Cloudflare's network carries it to one`;
     const route = $('route');
     route.replaceChildren(
-      routeItem('you' + (s.visitor.country ? ' · ' + s.visitor.country : ''), 'your browser'),
-      routeItem('Cloudflare' + (s.visitor.colo ? ' · ' + s.visitor.colo : ''), 'edge location that took your request'),
-      routeItem('tunnel → OKE' + (s.region ? ' · ' + s.region : ''), 'cloudflared in the cluster; no open ports'),
-      routeItem('pod · ' + (s.pod || 'local'), 'this server, node ' + (s.node || 'n/a')),
+      routeItem('you' + (country ? ' · ' + country : ''), 'your browser'),
+      routeItem('Cloudflare' + (colo ? ' · ' + colo : ''), 'edge location that took your request'),
+      routeItem('tunnel' + (tunnel.length ? ' · ' + tunnel.map(l => `${l.colo} ×${l.connections}`).join(', ') : ''), tunnelDetail),
+      routeItem('OKE' + (s.region ? ' · ' + s.region : ''), 'pod ' + (s.pod || 'local') + ', node ' + (s.node || 'n/a')),
     );
 
-    const country = s.visitor.country, colo = s.visitor.colo;
     routeMap.draw([
       { pos: COUNTRY_POS[country] || null, label: 'you · ' + (country || '?'), you: true },
       { pos: COLO_POS[colo] || null, label: 'Cloudflare · ' + (colo || '?') },
       { pos: REGION_POS[s.region] || null, label: 'OKE · ' + (s.region || '?') },
-    ]);
+    ], tunnel.map(l => ({ pos: COLO_POS[l.colo] || null, label: `tunnel · ${l.colo} ×${l.connections}` })));
 
     $('seats').textContent = s.handover
       ? `${s.handover.players} / ${s.handover.max} seats taken right now`

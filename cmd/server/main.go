@@ -82,7 +82,13 @@ func main() {
 	if handoverURL == "" {
 		handoverURL = "https://play.barrypekerman.com/healthz"
 	}
-	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminalHandlers.ActiveSessions, handoverURL, 30*time.Second))
+	// TUNNEL_METRICS_URL is cloudflared's /metrics in the cluster (unset
+	// locally: the map then shows no tunnel connections)
+	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminalHandlers.ActiveSessions, status.Sources{
+		HandoverHealthz: handoverURL,
+		TunnelMetrics:   os.Getenv("TUNNEL_METRICS_URL"),
+		TTL:             30 * time.Second,
+	}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
