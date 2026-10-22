@@ -22,7 +22,6 @@
 !web/
 !web/static/
 !web/static/js/
-!web/static/videos/
 !web/templates/
 
 # Repo root
@@ -41,6 +40,7 @@
 
 # Server
 !cmd/server/main.go
+!cmd/server/main_test.go
 !internal/geo/geo.go
 !internal/geo/places.json
 !internal/geo/gen/main.go
@@ -74,7 +74,6 @@
 !web/static/js/audio.js
 !web/static/js/routemap.js
 !web/static/js/terminal.js
-!web/static/videos/Screencast from 2025-12-12 14-31-06.webm
 !web/templates/home.html
 !web/templates/index.html
 
