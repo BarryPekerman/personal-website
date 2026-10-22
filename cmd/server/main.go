@@ -57,7 +57,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", noListing(http.FileServer(http.Dir("web/static")))))
 	// Front page: Uplink-style HUD around the terminal; /terminal is the
 	// terminal alone, full screen
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +68,7 @@ func main() {
 	})
 	// The same files the terminal shows, read-only, for the phone layout
 	// (which renders them as text instead of opening a terminal)
-	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", http.FileServerFS(content.FS)))
+	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
 	statusInfo := status.Info{
 		Pod:     os.Getenv("POD_NAME"),
 		Node:    os.Getenv("NODE_NAME"),
@@ -126,4 +126,17 @@ func main() {
 	}
 
 	logger.Info("Server exited")
+}
+
+// noListing serves files but not directory listings: a path naming a
+// directory (http.FileServer redirects those to end in "/") is a 404, so
+// visitors get the files the pages link to and can't browse for others.
+func noListing(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "" || strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
