@@ -1,10 +1,13 @@
 package status
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -176,5 +179,45 @@ func TestStatusRouteForGivenEdge(t *testing.T) {
 		if got := strings.ReplaceAll(kinds(r.Route), "?", ""); got != want {
 			t.Errorf("%q: %s, want %s", query, got, want)
 		}
+	}
+}
+
+func TestCacheServesStaleWhileRefreshing(t *testing.T) {
+	var hits atomic.Int32
+	release := make(chan struct{})
+	game := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := hits.Add(1)
+		if n > 1 {
+			<-release // every fetch after the first is slow
+		}
+		_, _ = fmt.Fprintf(w, `{"players": %d, "max": 60}`, n)
+	}))
+	defer game.Close()
+	defer close(release)
+
+	c := &cache[*Seats]{name: "handover", url: game.URL, ttl: 50 * time.Millisecond, client: game.Client(), parse: parseSeats}
+	// The first caller waits for the first answer
+	if s := c.get(context.Background()); s == nil || s.Players != 1 {
+		t.Fatalf("first answer: %+v", s)
+	}
+	time.Sleep(60 * time.Millisecond) // expired
+
+	// The slow refresh doesn't hold anyone up: all get the old answer at once
+	start := time.Now()
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			if s := c.get(context.Background()); s == nil || s.Players != 1 {
+				t.Errorf("stale answer: %+v", s)
+			}
+		})
+	}
+	wg.Wait()
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("callers waited %v for a slow source", d)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if n := hits.Load(); n != 2 {
+		t.Errorf("%d fetches, want 2 (one refresh for all callers)", n)
 	}
 }

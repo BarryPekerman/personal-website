@@ -203,7 +203,10 @@ func visitorFrom(r *http.Request) Visitor {
 	return v
 }
 
-// cache remembers the last answer (or failure, as T's zero value) for ttl
+// cache remembers the last answer (or failure, as T's zero value) for ttl.
+// Once that passes, callers get the old answer while one fetch, in the
+// background, gets a new one: a slow source never holds up the status. Only
+// the very first callers wait, for the first answer.
 type cache[T any] struct {
 	name   string // the source, for the error metric
 	url    string
@@ -211,34 +214,59 @@ type cache[T any] struct {
 	client *http.Client
 	parse  func(io.Reader) (T, bool)
 
-	mu      sync.Mutex
-	fetched time.Time
-	val     T
+	mu       sync.Mutex
+	fetched  time.Time
+	val      T
+	inflight chan struct{} // closed when the running fetch is done; nil when none runs
 }
 
 func (c *cache[T]) get(ctx context.Context) T {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.url == "" {
 		var zero T
 		return zero
 	}
+	c.mu.Lock()
 	if time.Since(c.fetched) < c.ttl {
+		defer c.mu.Unlock()
 		return c.val
 	}
-	c.fetched = time.Now()
-	var ok bool
-	if c.val, ok = c.fetch(ctx); !ok {
-		upstreamErrors.WithLabelValues(c.name).Inc()
+	if c.inflight == nil {
+		c.inflight = make(chan struct{})
+		go c.refresh(c.inflight)
 	}
+	wait := c.inflight
+	if !c.fetched.IsZero() {
+		defer c.mu.Unlock()
+		return c.val // stale while the refresh runs
+	}
+	c.mu.Unlock()
+	select {
+	case <-wait:
+	case <-ctx.Done():
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.val
 }
 
+// refresh fetches without holding the lock, then stores the answer
+func (c *cache[T]) refresh(done chan struct{}) {
+	v, ok := c.fetch()
+	if !ok {
+		upstreamErrors.WithLabelValues(c.name).Inc()
+	}
+	c.mu.Lock()
+	c.val, c.fetched, c.inflight = v, time.Now(), nil
+	c.mu.Unlock()
+	close(done)
+}
+
 // fetch reads and parses the source; false when either fails
-func (c *cache[T]) fetch(ctx context.Context) (T, bool) {
+func (c *cache[T]) fetch() (T, bool) {
 	var zero T
-	// not the visitor's context: a closed tab shouldn't cache a failure
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	// Not a visitor's context: it serves every caller, and a closed tab
+	// shouldn't cache a failure
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
