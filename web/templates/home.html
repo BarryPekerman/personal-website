@@ -312,7 +312,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
-<script src="/static/js/terminal.js?v=3"></script>
+<script src="/static/js/terminal.js?v=4"></script>
 <script src="/static/js/audio.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="/static/js/routemap.js?v=6"></script>
@@ -344,6 +344,7 @@ function initDesktop() {
     fontSize: 13,
     fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
     theme: { background: '#03060b', foreground: '#b9d6ee', cursor: '#5fd3ff', selectionBackground: '#1d3557' },
+    lazy: true,
     onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); routeMap.packet('out'); },
     onOutput: () => routeMap.packet('in'),
   });
