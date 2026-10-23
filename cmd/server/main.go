@@ -97,7 +97,31 @@ func newHandler(c config, logger *logrus.Logger) (http.Handler, error) {
 	shellManager := shell.NewVirtualManager(content.FS, logger)
 	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
 
-	pages, err := newPages(c.commit)
+	statusInfo := status.Info{
+		Pod:     c.pod,
+		Node:    c.node,
+		Region:  c.region,
+		Commit:  c.commit,
+		Started: time.Now().UTC(),
+	}
+	// DEV_VISITOR=IL/TLV previews the route map locally, where requests carry
+	// no Cloudflare headers
+	if country, colo, ok := strings.Cut(c.devVisitor, "/"); ok {
+		statusInfo.DevVisitor = status.Visitor{Country: country, Colo: colo}
+	}
+	// The tunnel metrics URL is unset locally: the map then shows no tunnel
+	// connections
+	statusHandler := status.NewHandler(statusInfo, terminal.ActiveSessions, status.Sources{
+		HandoverHealthz: c.handoverURL,
+		TunnelMetrics:   c.tunnelMetricsURL,
+		TTL:             30 * time.Second,
+	})
+	// The page and the terminal name the edge that served them
+	terminal.Edge = func(r *http.Request) (string, string) {
+		v := statusHandler.Visitor(r)
+		return v.Country, v.Colo
+	}
+	pages, err := newPages(c.commit, statusHandler.Visitor)
 	if err != nil {
 		return nil, err
 	}
@@ -117,25 +141,7 @@ func newHandler(c config, logger *logrus.Logger) (http.Handler, error) {
 	// The same files the terminal shows, read-only, for the phone layout
 	// (which renders them as text instead of opening a terminal)
 	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
-	statusInfo := status.Info{
-		Pod:     c.pod,
-		Node:    c.node,
-		Region:  c.region,
-		Commit:  c.commit,
-		Started: time.Now().UTC(),
-	}
-	// DEV_VISITOR=IL/TLV previews the route map locally, where requests carry
-	// no Cloudflare headers
-	if country, colo, ok := strings.Cut(c.devVisitor, "/"); ok {
-		statusInfo.DevVisitor = status.Visitor{Country: country, Colo: colo}
-	}
-	// The tunnel metrics URL is unset locally: the map then shows no tunnel
-	// connections
-	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminal.ActiveSessions, status.Sources{
-		HandoverHealthz: c.handoverURL,
-		TunnelMetrics:   c.tunnelMetricsURL,
-		TTL:             30 * time.Second,
-	}))
+	mux.Handle("GET /api/status", statusHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})

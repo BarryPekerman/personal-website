@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="/static/vendor/xterm.css?v={{.V}}">
 <link rel="stylesheet" href="/static/css/home.css?v={{.V}}">
 </head>
-<body>
+<!-- the edge that served this page, for the route map -->
+<body data-country="{{.Country}}" data-colo="{{.Colo}}">
 
 <!-- Boot: password-breaker effect, 2 seconds, skippable -->
 <div id="boot" title="Click to skip">

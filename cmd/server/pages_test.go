@@ -8,15 +8,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"portfolio/internal/status"
 )
 
 func TestPagesUseAssetVersion(t *testing.T) {
-	p, err := newPages("0123abc")
+	p, err := newPages("0123abc", noVisitor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"home.html", "index.html"} {
-		body := string(p[name])
+		body := render(t, p, name)
 		if !strings.Contains(body, "?v=0123abc") {
 			t.Errorf("%s: no asset version in the static URLs", name)
 		}
@@ -38,17 +40,43 @@ func TestPagesUseAssetVersion(t *testing.T) {
 		}
 	}
 
-	dev, err := newPages("dev")
+	dev, err := newPages("dev", noVisitor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(dev["home.html"]), "?v=dev") {
+	if strings.Contains(render(t, dev, "home.html"), "?v=dev") {
 		t.Error("a dev build should version assets by start time, not \"dev\"")
 	}
 }
 
+func noVisitor(*http.Request) status.Visitor { return status.Visitor{} }
+
+func render(t *testing.T, p *pages, name string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	p.handler(name).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	return rec.Body.String()
+}
+
+func TestHomeCarriesItsEdge(t *testing.T) {
+	p, err := newPages("abc", func(r *http.Request) status.Visitor {
+		return status.Visitor{Country: "IL", Colo: r.Header.Get("X-Colo")}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Colo", `"><script>`)
+	p.handler("home.html").ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-country="IL"`) || strings.Contains(body, `"><script>`) {
+		t.Errorf("edge not carried, or not escaped: %s", body[:min(len(body), 400)])
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
-	p, err := newPages("abc")
+	p, err := newPages("abc", noVisitor)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -98,8 +99,15 @@ func NewHandler(info Info, sessions func() int64, src Sources) *Handler {
 	}
 }
 
+// ServeHTTP reports the status. The route is for the request's own edge, or,
+// given ?country=IL&colo=TLV, for that one: the front page passes the edge
+// that served the page or the terminal, which can differ from the one that
+// takes a later status request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	v := h.visitor(r)
+	v := h.Visitor(r)
+	if q := (Visitor{Country: r.URL.Query().Get("country"), Colo: r.URL.Query().Get("colo")}); validVisitor(q) {
+		v = q
+	}
 	resp := response{
 		Pod:      h.info.Pod,
 		Node:     h.info.Node,
@@ -153,7 +161,18 @@ func route(v Visitor, links []TunnelLink, region string) []Hop {
 	return append(hops, Hop{Kind: "cluster", Label: region, Pos: at(geo.Region(region))})
 }
 
-func (h *Handler) visitor(r *http.Request) Visitor {
+var (
+	countryCode = regexp.MustCompile(`^[A-Z0-9]{2}$`) // ISO alpha-2, or Cloudflare's XX and T1
+	coloCode    = regexp.MustCompile(`^[A-Z]{3}$`)    // IATA
+)
+
+func validVisitor(v Visitor) bool {
+	return countryCode.MatchString(v.Country) && coloCode.MatchString(v.Colo)
+}
+
+// Visitor is what Cloudflare says about the request (DevVisitor when it went
+// around Cloudflare)
+func (h *Handler) Visitor(r *http.Request) Visitor {
 	if r.Header.Get("CF-Ray") == "" {
 		return h.info.DevVisitor
 	}

@@ -7,17 +7,30 @@ import (
 	"strconv"
 	"time"
 
+	"portfolio/internal/status"
 	"portfolio/web"
 )
 
-// pages are the HTML pages, rendered once at startup. The templates put the
-// asset version on every static URL (?v=...), so a deploy never serves a page
-// with an old script that a cache still holds.
-type pages map[string][]byte
+// pages renders the HTML pages. The templates put the asset version on every
+// static URL (?v=...), so a deploy never serves a page with an old script
+// that a cache still holds, and the front page carries the Cloudflare edge
+// that served it, for the route map.
+type pages struct {
+	tmpl    *template.Template
+	version string
+	visitor func(*http.Request) status.Visitor
+}
 
-// newPages renders every template with the asset version: the commit, or in
-// a dev build (no commit) the start time, so each restart busts the cache
-func newPages(commit string) (pages, error) {
+// pageData is what the templates see
+type pageData struct {
+	V       string // asset version
+	Country string // the visitor's country and the edge that served the page
+	Colo    string
+}
+
+// newPages loads the templates. The asset version is the commit, or in a dev
+// build (no commit) the start time, so each restart busts the cache.
+func newPages(commit string, visitor func(*http.Request) status.Visitor) (*pages, error) {
 	version := commit
 	if version == "dev" {
 		version = strconv.FormatInt(time.Now().Unix(), 36)
@@ -26,27 +39,24 @@ func newPages(commit string) (pages, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := pages{}
-	for _, t := range tmpl.Templates() {
-		var b bytes.Buffer
-		if err := t.Execute(&b, struct{ V string }{version}); err != nil {
-			return nil, err
-		}
-		p[t.Name()] = b.Bytes()
-	}
-	return p, nil
+	return &pages{tmpl: tmpl, version: version, visitor: visitor}, nil
 }
 
-func (p pages) handler(name string) http.Handler {
-	body, ok := p[name]
-	if !ok {
+func (p *pages) handler(name string) http.Handler {
+	if p.tmpl.Lookup(name) == nil {
 		panic("no template " + name)
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		v := p.visitor(r)
+		var b bytes.Buffer
+		if err := p.tmpl.ExecuteTemplate(&b, name, pageData{V: p.version, Country: v.Country, Colo: v.Colo}); err != nil {
+			http.Error(w, "page unavailable", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// Always revalidate: the page names the current assets
+		// Always revalidate: the page names the current assets and its edge
 		w.Header().Set("Cache-Control", "no-cache")
-		_, _ = w.Write(body)
+		_, _ = w.Write(b.Bytes())
 	})
 }
 

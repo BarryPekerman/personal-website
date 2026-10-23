@@ -253,3 +253,24 @@ func TestClientAddr(t *testing.T) {
 		}
 	}
 }
+
+func TestEdgeIsFirstFrame(t *testing.T) {
+	srv, h := newLimitedServer(t, DefaultLimits)
+	h.Edge = func(r *http.Request) (string, string) { return "IL", r.Header.Get("X-Test-Colo") }
+	header := http.Header{"X-Test-Colo": {"TLV"}}
+	ws, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	defer func() { _ = ws.Close() }()
+
+	kind, data, err := ws.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != websocket.TextMessage || string(data) != `{"type":"edge","country":"IL","colo":"TLV"}`+"\n" {
+		t.Errorf("first frame: type %d, %q", kind, data)
+	}
+	readUntil(t, ws, "$ ")
+}

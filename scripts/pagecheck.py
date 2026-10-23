@@ -70,6 +70,30 @@ with sync_playwright() as p:
     check("desktop: one session", len(sockets) == 1)
     page.screenshot(path=f"{out}/desktop.png")
 
+    # The desktop route is the page's edge, then the terminal's, never a status
+    # request's. Fake Cloudflare headers: the WebSocket enters at FRA (the
+    # context's headers), the page at TLV and every status request at MRS.
+    ctx = browser.new_context(viewport={"width": 1400, "height": 900},
+                              extra_http_headers={"CF-IPCountry": "DE", "CF-Ray": "0000000000000000-FRA"})
+    def at(colo):
+        return lambda route: route.continue_(headers={**route.request.headers, "cf-ray": "0000000000000000-" + colo})
+    page = ctx.new_page()
+    watch(page, "desktop edges")
+    page.route(lambda url: url.rstrip("/") == base, at("TLV"))
+    page.route("**/api/status*", at("MRS"))
+    page.goto(base + "/")
+    page.wait_for_timeout(2500)
+    route_text = lambda: page.locator("#route").inner_text()
+    check("desktop route: the page's edge (TLV), not the status request's (MRS)",
+          "TLV" in route_text() and "MRS" not in route_text() and "page request" in route_text())
+    page.click("#terminal")
+    page.keyboard.press("a")
+    wait_for_text(page, "$ ")
+    page.wait_for_timeout(1000)
+    check("desktop route: the terminal's edge (FRA) once a session is open",
+          "FRA" in route_text() and "terminal connection" in route_text())
+    ctx.close()
+
     # Full-screen terminal
     page = browser.new_page(viewport={"width": 1200, "height": 800})
     watch(page, "/terminal")
