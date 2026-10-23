@@ -143,20 +143,20 @@ jobs:
         #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
         run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
 
-  # After main's image is signed, open the PR in oke-gitops that deploys it
-  # (the image bump in portfolio/deployment.yaml). Merging that PR is the
-  # deploy: ArgoCD syncs on oke-gitops' webhook. An older deploy PR still
-  # open is closed as superseded. GITOPS_TOKEN is a fine-grained token for
-  # oke-gitops only: contents and pull requests, read and write.
+  # After main's image is signed, push the image bump to oke-gitops as a
+  # branch portfolio-<sha7>; oke-gitops' own workflow (deploy-pr.yml) opens it
+  # as a PR and closes older ones. Merging that PR is the deploy: ArgoCD syncs
+  # on oke-gitops' webhook. GITOPS_DEPLOY_KEY is an SSH deploy key for
+  # oke-gitops only (no token with access to other repos).
   deploy-pr:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     needs: image
     steps:
-      - name: Open the deploy PR in oke-gitops
+      - name: Push the image bump to oke-gitops
         env:
-          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
-          SITE_TOKEN: ${{ github.token }}
+          DEPLOY_KEY: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
           MESSAGE: ${{ github.event.head_commit.message }}
         run: |
@@ -168,23 +168,24 @@ jobs:
           if [[ $subject =~ ^(.*)\ \(#([0-9]+)\)$ ]]; then
             subject=${BASH_REMATCH[1]}; pr=${BASH_REMATCH[2]}
           else
-            pr=$(GH_TOKEN=$SITE_TOKEN gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '.[0].number // empty')
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '.[0].number // empty')
           fi
           title="portfolio $short: $subject${pr:+ (personal-website#$pr)}"
+          body="Deploys BarryPekerman/personal-website@$SHA${pr:+ (BarryPekerman/personal-website#$pr)}. The image was built, scanned with Grype and signed with cosign by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Merging deploys it."
 
-          gh auth setup-git
-          git clone --depth 1 https://github.com/BarryPekerman/oke-gitops.git gitops
+          # SSH with the deploy key; GitHub's host key pinned (from api.github.com/meta)
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/gitops && chmod 600 ~/.ssh/gitops
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/gitops -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+          git clone -q --depth 1 git@github.com:BarryPekerman/oke-gitops.git gitops
           cd gitops
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           sed -i -E "s|(ghcr.io/barrypekerman/personal-website:)[0-9a-f]{40}|\1$SHA|" portfolio/deployment.yaml
           if git diff --quiet; then echo "Already deployed"; exit 0; fi
-          git switch -c "portfolio-$short"
-          git commit -qam "$title"
+          git switch -q -c "portfolio-$short"
+          git commit -q -a -m "$title" -m "$body"
           git push -q origin "portfolio-$short"
-          url=$(gh pr create -R BarryPekerman/oke-gitops --head "portfolio-$short" --title "$title" --body "Deploys BarryPekerman/personal-website@$SHA${pr:+ (BarryPekerman/personal-website#$pr)}. The image was built, scanned with Grype and signed with cosign by [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Merging deploys it.")
-          echo "Opened $url"
-          for old in $(gh pr list -R BarryPekerman/oke-gitops --state open --json number,headRefName \
-                         --jq ".[] | select(.headRefName | startswith(\"portfolio-\")) | select(.headRefName != \"portfolio-$short\") | .number"); do
-            gh pr close "$old" -R BarryPekerman/oke-gitops --delete-branch --comment "Superseded by $url"
-          done
+          echo "Pushed portfolio-$short; oke-gitops opens the PR: $title"
