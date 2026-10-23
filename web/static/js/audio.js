@@ -1,5 +1,15 @@
 // Sound effects and ambient music for the front page: generated live with Web
-// Audio, both off by default, each with its own toggle (#sfx, #music).
+// Audio, both off by default, each with its own toggle: every button marked
+// data-audio="sfx" or data-audio="music" (the desktop HUD and the phone page
+// each have one of both).
+// label sets the text of every toggle for kind ("sfx" or "music")
+function label(kind, text) {
+  document.querySelectorAll(`[data-audio="${kind}"]`).forEach(b => { b.textContent = text; });
+}
+function onToggle(kind, fn) {
+  document.querySelectorAll(`[data-audio="${kind}"]`).forEach(b => b.addEventListener('click', fn));
+}
+
 // ---------- sound effects: separate toggle, off by default ----------
 let sharedCtx = null;
 function audioContext() {
@@ -70,15 +80,15 @@ const Sfx = {
     if (!this.out) this.init();
     audioContext().resume();
     this.on = !this.on;
-    document.getElementById('sfx').textContent = this.on ? 'sfx on' : 'sfx off';
+    label('sfx', this.on ? 'sfx on' : 'sfx off');
     try { localStorage.setItem('sfx', this.on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
   },
 };
-document.getElementById('sfx').addEventListener('click', () => Sfx.toggle());
+onToggle('sfx', () => Sfx.toggle());
 // one click sound for every button and system entry
 document.addEventListener('click', e => { if (e.target.closest('.btn, .sys')) Sfx.click(); });
 try {
-  if (localStorage.getItem('sfx') === 'on') document.getElementById('sfx').textContent = 'sfx off (click to resume)';
+  if (localStorage.getItem('sfx') === 'on') label('sfx', 'sfx off (click to resume)');
 } catch (e) { /* storage blocked */ }
 
 // ---------- ambient music: generated live, off by default ----------
@@ -162,12 +172,12 @@ const Music = {
       this.master.gain.linearRampToValueAtTime(0, now + 1);     // fade out
       clearInterval(this.timer);
     }
-    document.getElementById('music').textContent = this.on ? '♪ on' : '♪ off';
+    label('music', this.on ? '♪ on' : '♪ off');
     try { localStorage.setItem('music', this.on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
   },
 };
-document.getElementById('music').addEventListener('click', () => Music.toggle());
+onToggle('music', () => Music.toggle());
 // Browsers forbid sound before a user gesture, so a remembered "on" only shows as a hint
 try {
-  if (localStorage.getItem('music') === 'on') document.getElementById('music').textContent = '♪ off (click to resume)';
+  if (localStorage.getItem('music') === 'on') label('music', '♪ off (click to resume)');
 } catch (e) { /* storage blocked */ }

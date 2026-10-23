@@ -126,6 +126,12 @@ with sync_playwright() as p:
     page.click("#p-cv-btn")
     cv = page.locator("#p-cv-text").inner_text()
     check("phone: CV and contact from content/", "projects" in cv and "github.com/BarryPekerman" in cv and "BARRY PEKERMAN" not in cv)
+    toggle = page.locator(".phone [data-audio=music]")
+    toggle.click()
+    page.wait_for_timeout(300)
+    check("phone: music toggle turns music on", toggle.inner_text() == "♪ on"
+          and page.evaluate("Music.on && Music.ctx.state === 'running'"))
+    toggle.click()
     check("phone: nothing wider than the screen", not page.evaluate("document.documentElement.scrollWidth > innerWidth"))
     page.screenshot(path=f"{out}/phone.png", full_page=True)
     page.goto(base + "/terminal")
