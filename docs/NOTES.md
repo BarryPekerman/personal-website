@@ -99,7 +99,7 @@ site with it.
 | Exposure | Cloudflare Tunnel `oke-portfolio`: cloudflared runs in the cluster (outbound only); token is a SOPS secret in `oke-gitops` |
 | DNS, tunnel | `oci-oke-infra` `terraform/cloudflare.tf` (local runs; HCP state `Berries-/oci-oke-infra`) |
 | Status panel | `/api/status`: pod and node (Downward API), commit (`-X main.commit`), uptime, open terminals, The Handover's seats (its `/healthz`) |
-| Route map | Visitor country (`CF-IPCountry`) → edge (`CF-Ray` suffix) → the tunnel connection it enters at (cloudflared metrics) → cluster; positions from `internal/geo` (generated: OurAirports, mledoze/countries) |
+| Route map | Visitor country (`CF-IPCountry`) → edge (`CF-Ray` suffix of the page request, then of the terminal's WebSocket; on a phone, of the status request it draws) → the tunnel connection it enters at (cloudflared metrics) → cluster; positions from `internal/geo` (generated: OurAirports, mledoze/countries) |
 
 ## Roadmap
 

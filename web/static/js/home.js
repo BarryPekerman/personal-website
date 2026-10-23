@@ -15,6 +15,14 @@ const $ = id => document.getElementById(id);
 // query decides both
 const PHONE = matchMedia('(max-width: 700px), (max-height: 500px) and (pointer: coarse)');
 
+// ---------- the edge the desktop route shows ----------
+// The page's own request, then the terminal's connection once a session is
+// open: those are what the visitor uses. A status request every 15 s can
+// enter Cloudflare somewhere else, so the desktop asks for this edge's route.
+// The phone draws the status request itself as its traffic, so it shows that
+// request's own route.
+let edge = { country: document.body.dataset.country, colo: document.body.dataset.colo, via: 'page request' };
+
 // ---------- maps: the terminal reports its traffic to the desktop one ----------
 const routeMap = new RouteMap($('map'));
 const phoneMap = new RouteMap($('p-map'));
@@ -30,6 +38,7 @@ function initDesktop() {
     lazy: true,
     onInput: data => { if (data === '\r') Sfx.enter(); else Sfx.key(); routeMap.packet('out'); },
     onOutput: () => routeMap.packet('in'),
+    onEdge: e => { edge = { country: e.country, colo: e.colo, via: 'terminal connection' }; refreshStatus(); },
   });
 }
 initDesktop();
@@ -122,7 +131,9 @@ async function refreshStatus() {
   // on the phone the status request is the traffic: it's drawn going out and back
   phoneMap.packet('out');
   try {
-    const r = await fetch('/api/status', { cache: 'no-store' });
+    const desktopEdge = !PHONE.matches && /^[A-Z]{3}$/.test(edge.colo || '');
+    const query = desktopEdge ? '?' + new URLSearchParams({ country: edge.country, colo: edge.colo }) : '';
+    const r = await fetch('/api/status' + query, { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
     const s = await r.json();
     $('s-pod').textContent = s.pod || 'n/a (not in a cluster)';
@@ -144,11 +155,10 @@ async function refreshStatus() {
     // request -> (when the tunnel has no connection there) the edge Cloudflare
     // most likely carries it on to -> the cluster
     const route = s.route || [];
+    const took = 'Cloudflare edge that took your ' + (desktopEdge ? edge.via : 'request');
     const detail = {
       you: () => 'your browser',
-      edge: h => h.tunnel
-        ? 'Cloudflare edge that took your request; the tunnel connects here, so it goes straight in'
-        : 'Cloudflare edge that took your request',
+      edge: h => h.tunnel ? took + '; the tunnel connects here, so it goes straight in' : took,
       forward: h => `the tunnel has no connection at ${route[1].label}: Cloudflare carries it on, most likely to ${h.label} (nearest)`,
       cluster: () => 'pod ' + (s.pod || 'local') + ', node ' + (s.node || 'n/a'),
     };

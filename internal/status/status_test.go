@@ -146,3 +146,29 @@ func TestRoute(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusRouteForGivenEdge(t *testing.T) {
+	h := NewHandler(Info{Region: "il-jerusalem-1"}, func() int64 { return 0 }, Sources{TTL: time.Minute})
+	cf := map[string]string{"CF-IPCountry": "IL", "CF-Ray": "8d2f1c3b5e6a7f80-MRS"}
+	for query, want := range map[string]string{
+		"":                     "you:IL edge:MRS cluster:il-jerusalem-1",
+		"?country=IL&colo=TLV": "you:IL edge:TLV cluster:il-jerusalem-1",
+		"?country=IL&colo=tlv": "you:IL edge:MRS cluster:il-jerusalem-1", // not a code: ignored
+		"?country=IL&colo=<b>": "you:IL edge:MRS cluster:il-jerusalem-1",
+		"?colo=TLV":            "you:IL edge:MRS cluster:il-jerusalem-1",
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/status"+query, nil)
+		for k, v := range cf {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var r response
+		if err := json.NewDecoder(rec.Body).Decode(&r); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.ReplaceAll(kinds(r.Route), "?", ""); got != want {
+			t.Errorf("%q: %s, want %s", query, got, want)
+		}
+	}
+}

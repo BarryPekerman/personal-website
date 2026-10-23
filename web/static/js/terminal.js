@@ -6,8 +6,9 @@
 // page load, so a visitor who only reads holds no session on the server. After
 // the server closes it (idle, shell exit), a key press opens a new one.
 class PortfolioTerminal {
-    constructor(element, { theme, fontSize = 14, fontFamily, onInput, onOutput, lazy = false } = {}) {
+    constructor(element, { theme, fontSize = 14, fontFamily, onInput, onOutput, onEdge, lazy = false } = {}) {
         this.onOutput = onOutput;
+        this.onEdge = onEdge;
         this.ws = null;
         this.pending = [];  // messages waiting for the connection to open
         this.term = new Terminal({
@@ -52,6 +53,14 @@ class PortfolioTerminal {
             for (const m of this.pending.splice(0)) ws.send(m);
         };
         ws.onmessage = event => {
+            // the one text frame: where the connection entered Cloudflare
+            if (typeof event.data === 'string') {
+                try {
+                    const m = JSON.parse(event.data);
+                    if (m.type === 'edge' && this.onEdge) this.onEdge(m);
+                } catch (e) { /* not ours */ }
+                return;
+            }
             // stream: true keeps multi-byte characters split across frames intact
             this.term.write(decoder.decode(event.data, { stream: true }));
             if (this.onOutput) this.onOutput();

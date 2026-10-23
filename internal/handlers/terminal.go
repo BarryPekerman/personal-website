@@ -50,12 +50,25 @@ type clientMessage struct {
 	Data string `json:"data"`
 }
 
+// edgeMessage tells the browser where its WebSocket entered Cloudflare
+type edgeMessage struct {
+	Type    string `json:"type"`
+	Country string `json:"country"`
+	Colo    string `json:"colo"`
+}
+
 // TerminalHandler handles WebSocket connections for terminal sessions
 type TerminalHandler struct {
 	shellManager shell.Manager
 	logger       *logrus.Logger
 	upgrader     websocket.Upgrader
 	limits       Limits
+
+	// Edge, when set, names the visitor's country and the Cloudflare edge
+	// that took the WebSocket: sent to the browser as the session's first
+	// frame, {"type":"edge",...}, for the route map. It is the only text
+	// frame; terminal output is binary.
+	Edge func(r *http.Request) (country, colo string)
 
 	mu     sync.Mutex
 	total  int
@@ -166,6 +179,15 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 	log.Info("Shell session started")
+
+	// Nothing else writes yet: the output pump starts below
+	if h.Edge != nil {
+		country, colo := h.Edge(r)
+		_ = ws.SetWriteDeadline(time.Now().Add(writeWait))
+		if err := ws.WriteJSON(edgeMessage{Type: "edge", Country: country, Colo: colo}); err != nil {
+			return
+		}
+	}
 
 	// A peer that answers neither pings nor anything else is gone: the read
 	// deadline ends pumpInput, which ends the shell
