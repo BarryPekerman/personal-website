@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script src="/static/js/terminal-page.js?v={{.V}}"></script>
+    <!-- before the script: until the viewport is set, a phone lays out at
+         ~980px and the script's phone test doesn't match -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/static/js/terminal-page.js?v={{.V}}"></script>
     <title>Barry Pekerman — Portfolio Terminal</title>
     <link rel="stylesheet" href="/static/vendor/xterm.css?v={{.V}}">
     <link rel="stylesheet" href="/static/css/terminal-page.css?v={{.V}}">
