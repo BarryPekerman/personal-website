@@ -5,10 +5,13 @@ package status
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -96,8 +99,11 @@ type Handler struct {
 // the traffic. An empty URL leaves that part of the status null.
 type Sources struct {
 	HandoverHealthz string // The Handover's /healthz, for its seats
-	TunnelMetrics   string // cloudflared's Prometheus /metrics, for its edge locations
-	TTL             time.Duration
+	// cloudflared's Prometheus /metrics, for its edge locations. Every address
+	// its host resolves to is read and the connections added up: with a
+	// headless Service, each cloudflared replica's.
+	TunnelMetrics string
+	TTL           time.Duration
 }
 
 // NewHandler reports info, the live session count, The Handover's seats and
@@ -108,7 +114,7 @@ func NewHandler(info Info, sessions func() int64, src Sources) *Handler {
 		info:     info,
 		sessions: sessions,
 		seats:    &cache[*Seats]{name: "handover", url: src.HandoverHealthz, ttl: src.TTL, client: client, parse: parseSeats},
-		tunnel:   &cache[[]TunnelLink]{name: "tunnel", url: src.TunnelMetrics, ttl: src.TTL, client: client, parse: parseTunnel},
+		tunnel:   &cache[[]TunnelLink]{name: "tunnel", url: src.TunnelMetrics, ttl: src.TTL, client: client, parse: parseTunnel, everyAddr: true},
 	}
 }
 
@@ -213,6 +219,9 @@ type cache[T any] struct {
 	ttl    time.Duration
 	client *http.Client
 	parse  func(io.Reader) (T, bool)
+	// read the URL at every address its host resolves to, and parse what
+	// they answered together (at least one must)
+	everyAddr bool
 
 	mu       sync.Mutex
 	fetched  time.Time
@@ -268,19 +277,74 @@ func (c *cache[T]) fetch() (T, bool) {
 	// shouldn't cache a failure
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
-	if err != nil {
+	urls := []string{c.url}
+	if c.everyAddr {
+		var err error
+		if urls, err = everyAddr(ctx, c.url); err != nil {
+			return zero, false
+		}
+	}
+	var body bytes.Buffer
+	read := false
+	for _, u := range urls {
+		if c.read(ctx, u, &body) {
+			read = true
+		}
+	}
+	if !read {
 		return zero, false
+	}
+	return c.parse(&body)
+}
+
+// read appends the body at u to buf; false when it can't be read whole
+func (c *cache[T]) read(ctx context.Context, u string, buf *bytes.Buffer) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return false
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return zero, false
+		return false
 	}
 	defer resp.Body.Close() //nolint:errcheck // read-only body
 	if resp.StatusCode != http.StatusOK {
-		return zero, false
+		return false
 	}
-	return c.parse(io.LimitReader(resp.Body, 1<<20))
+	n := buf.Len()
+	if _, err := buf.ReadFrom(io.LimitReader(resp.Body, 1<<20)); err != nil {
+		buf.Truncate(n)
+		return false
+	}
+	buf.WriteByte('\n')
+	return true
+}
+
+// lookupHost resolves a source's host; tests replace it
+var lookupHost = net.DefaultResolver.LookupHost
+
+// everyAddr returns raw with its host replaced by each address it resolves to
+func everyAddr(ctx context.Context, raw string) ([]string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	addrs, err := lookupHost(ctx, u.Hostname())
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]string, len(addrs))
+	for i, a := range addrs {
+		v := *u
+		v.Host = a
+		if u.Port() != "" {
+			v.Host = net.JoinHostPort(a, u.Port())
+		} else if strings.Contains(a, ":") {
+			v.Host = "[" + a + "]"
+		}
+		urls[i] = v.String()
+	}
+	return urls, nil
 }
 
 func parseSeats(r io.Reader) (*Seats, bool) {

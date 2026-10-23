@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -128,6 +129,42 @@ cloudflared_tunnel_total_requests 42
 	want := []TunnelLink{{Colo: "MRS", Connections: 2}, {Colo: "TLV", Connections: 1}}
 	if !ok || len(links) != 2 || links[0] != want[0] || links[1] != want[1] {
 		t.Errorf("parseTunnel: %+v, want %+v", links, want)
+	}
+}
+
+// With two cloudflared replicas behind a headless Service, each holds its own
+// connections: the status adds up every replica's, and skips one that's down
+func TestTunnelEveryReplica(t *testing.T) {
+	serve := func(addr, loc string) (port string) {
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			t.Skipf("listen %s: %v", addr, err)
+		}
+		srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = fmt.Fprintf(w, "cloudflared_tunnel_server_locations{connection_id=\"0\",edge_location=%q} 1\n", loc)
+			_, _ = fmt.Fprintf(w, "cloudflared_tunnel_server_locations{connection_id=\"1\",edge_location=%q} 1", loc)
+		}), ReadHeaderTimeout: time.Second}
+		go func() { _ = srv.Serve(l) }()
+		t.Cleanup(func() { _ = srv.Close() })
+		_, port, _ = net.SplitHostPort(l.Addr().String())
+		return port
+	}
+	port := serve("127.0.0.1:0", "tlv02")
+	serve("127.0.0.2:"+port, "mrs06")
+	orig := lookupHost
+	t.Cleanup(func() { lookupHost = orig })
+	lookupHost = func(_ context.Context, host string) ([]string, error) {
+		if host != "portfolio-tunnel-metrics" {
+			return nil, fmt.Errorf("unexpected host %q", host)
+		}
+		return []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"}, nil // .3: nothing listens
+	}
+
+	h := NewHandler(Info{}, func() int64 { return 0 }, Sources{TunnelMetrics: "http://portfolio-tunnel-metrics:" + port + "/metrics", TTL: time.Minute})
+	links := h.tunnel.get(context.Background())
+	want := []TunnelLink{{Colo: "MRS", Connections: 2}, {Colo: "TLV", Connections: 2}}
+	if len(links) != 2 || links[0] != want[0] || links[1] != want[1] {
+		t.Errorf("links: %+v, want %+v", links, want)
 	}
 }
 
