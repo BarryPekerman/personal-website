@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"portfolio/content"
 	terminalHandlers "portfolio/internal/handlers"
 	"portfolio/internal/shell"
@@ -25,15 +25,16 @@ import (
 var commit = "dev"
 
 func main() {
-	logger := logrus.New()
-	logger.SetFormatter(&logrus.JSONFormatter{})
+	level := slog.LevelInfo
 	if os.Getenv("LOG_LEVEL") == "debug" {
-		logger.SetLevel(logrus.DebugLevel)
+		level = slog.LevelDebug
 	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
 	handler, err := newHandler(configFromEnv(), logger)
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to set up the server")
+		logger.Error("Failed to set up the server", "err", err)
+		os.Exit(1)
 	}
 
 	addr := ":8080"
@@ -47,9 +48,10 @@ func main() {
 	}
 
 	go func() {
-		logger.WithField("addr", addr).Info("Starting portfolio terminal server")
+		logger.Info("Starting portfolio terminal server", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.WithError(err).Fatal("Failed to start server")
+			logger.Error("Failed to start server", "err", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -61,7 +63,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.WithError(err).Fatal("Server forced to shutdown")
+		logger.Error("Server forced to shutdown", "err", err)
+		os.Exit(1)
 	}
 
 	logger.Info("Server exited")
@@ -93,7 +96,7 @@ func configFromEnv() config {
 }
 
 // newHandler builds every route, wrapped in the security headers
-func newHandler(c config, logger *logrus.Logger) (http.Handler, error) {
+func newHandler(c config, logger *slog.Logger) (http.Handler, error) {
 	// The shell is simulated: nothing a visitor types runs anywhere
 	shellManager := shell.NewVirtualManager(content.FS, logger)
 	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
