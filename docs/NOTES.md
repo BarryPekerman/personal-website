@@ -24,8 +24,8 @@ types runs anywhere. The real, isolated shell is The Handover
 - **No real shell here** (2026-10-23): the `local` and `k8s` backends,
   `connect sandbox` and the guest image are deleted. A real bash was one env
   var away in the production image; The Handover is the real shell.
-- **Sessions are limited** (2026-10-23): 200 in all, 8 per visitor (IPv6 by
-  /64), closed after 15 minutes without input, dead browsers dropped. The
+- **Sessions are limited** (2026-10-23): 200 per pod, 8 per visitor per pod
+  (IPv6 by /64), closed after 15 minutes without input, dead browsers dropped. The
   front page opens a session on the first key press, not on load.
 - **Same origin only** (2026-10-23): third-party scripts and the map data are
   vendored (`web/static/vendor/`), so the CSP allows `script-src 'self'` and
@@ -107,11 +107,11 @@ site with it.
 | Piece | Where |
 |---|---|
 | Image | `ghcr.io/barrypekerman/personal-website:<commit>`, multi-arch (the nodes are ARM), built by CI on every merge to `main`; `ghcr-retention.yml` keeps the newest 10 |
-| Deploy | `oke-gitops` `portfolio/`: ArgoCD Application; deploying is bumping the image commit in `deployment.yaml` |
+| Deploy | `oke-gitops` `portfolio/`: ArgoCD Application, 2 replicas on different nodes; CI opens the image bump there as a PR, and merging it deploys |
 | Exposure | Cloudflare Tunnel `oke-portfolio`: cloudflared runs in the cluster (outbound only); token is a SOPS secret in `oke-gitops` |
 | DNS, tunnel | `oci-oke-infra` `terraform/cloudflare.tf` (local runs; HCP state `Berries-/oci-oke-infra`) |
-| Status panel | `/api/status`: pod and node (Downward API), commit (`-X main.commit`), uptime, open terminals, The Handover's seats (its `/healthz`) |
-| Route map | Visitor country (`CF-IPCountry`) → edge (`CF-Ray` suffix of the page request, then of the terminal's WebSocket; on a phone, of the status request it draws) → the tunnel connection it enters at (cloudflared metrics) → cluster; positions from `internal/geo` (generated: OurAirports, mledoze/countries) |
+| Status panel | `/api/status`: pod and node (Downward API), commit (`-X main.commit`), uptime, terminals open on that pod, The Handover's seats (its `/healthz`) |
+| Route map | Visitor country (`CF-IPCountry`) → edge (`CF-Ray` suffix of the page request, then of the terminal's WebSocket; on a phone, of the status request it draws) → the tunnel connection it enters at (every cloudflared replica's metrics, through a headless Service) → cluster; positions from `internal/geo` (generated: OurAirports, mledoze/countries) |
 
 ## Roadmap
 
