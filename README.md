@@ -1,9 +1,10 @@
 # Portfolio Terminal
 
-My portfolio website, styled after the hacking game *Uplink*: visitors get a
-terminal in the browser and explore my CV and projects with `ls`, `cat` and `cd`.
-Live at https://barrypekerman.com, on my OKE cluster; around the terminal, the
-page shows the real deployment serving it and the visitor's route to it.
+My portfolio website, styled after the hacking game *Uplink*: on a laptop,
+visitors get a terminal in the browser and explore my CV and projects with
+`ls`, `cat` and `cd`; around it, the page shows the real deployment serving it
+and the visitor's route to it. Phones get the same content as a page to read.
+Live at https://barrypekerman.com, on my OKE cluster.
 
 ## How it works
 
@@ -86,3 +87,4 @@ Details and reasoning: [docs/NOTES.md](docs/NOTES.md).
 - [x] Uplink styling, live status panel and route map
 - [ ] The real CV
 - [x] Remove k8s mode (The Handover is the real shell)
+- [x] Session limits, CSP, `/metrics`, signed and scanned images, browser check in CI

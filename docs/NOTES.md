@@ -1,6 +1,6 @@
-# Project notes
+# Design notes
 
-Working notes and decisions. Last updated 2026-10-20.
+Decisions and the reasoning behind them. Last updated 2026-10-23.
 
 **Current direction: see "No fake widgets" below. It overrides older sections where they disagree.**
 
@@ -13,7 +13,7 @@ types runs anywhere. The real, isolated shell is The Handover
 
 ## Decisions so far
 
-- **v1 shell is virtual** (`internal/shell/virtual.go`). It's cheap to run,
+- **The shell is virtual** (`internal/shell/virtual.go`). It's cheap to run,
   has nothing to break into, and is easy to test.
 - **Command blocklists don't work.** xterm.js sends one keystroke per message,
   and blocklists can be bypassed anyway. Isolation is the only real defense.
@@ -24,6 +24,14 @@ types runs anywhere. The real, isolated shell is The Handover
 - **No real shell here** (2026-10-23): the `local` and `k8s` backends,
   `connect sandbox` and the guest image are deleted. A real bash was one env
   var away in the production image; The Handover is the real shell.
+- **Sessions are limited** (2026-10-23): 200 in all, 8 per visitor (IPv6 by
+  /64), closed after 15 minutes without input, dead browsers dropped. The
+  front page opens a session on the first key press, not on load.
+- **Same origin only** (2026-10-23): third-party scripts and the map data are
+  vendored (`web/static/vendor/`), so the CSP allows `script-src 'self'` and
+  nothing loads from a CDN.
+- **Phones get a page, not a terminal**: the same content (projects, CV,
+  status, route) as text, and no xterm.js download.
 
 ## Real BusyBox: options considered
 
@@ -39,7 +47,10 @@ types runs anywhere. The real, isolated shell is The Handover
 
 ## Who visits and what they need
 
-| Visitor | What happens today | What would help |
+As assessed before the 2026-10-16 redesign; the page now does what the last
+column asks (a phone gets a plain page; the CV and its PDF are still to come).
+
+| Visitor | What happened then | What would help |
 |---|---|---|
 | Random visitor | Black screen, doesn't know what to type, leaves in ~10s | Guided start: clickable commands, a short auto-typed intro |
 | Non-technical HR | Won't type anything. **The terminal hurts here** | Name, title and contact visible immediately; a "plain CV / PDF" link |
@@ -48,8 +59,10 @@ types runs anywhere. The real, isolated shell is The Handover
 
 ## The idea that makes it worth showing: a live console
 
-Today it's a clone of a common genre ("terminal portfolio"). It becomes
-distinctive if the terminal is a **window into the infrastructure running it**:
+A terminal portfolio alone is a common genre. It becomes distinctive if the
+page is a **window into the infrastructure running it**. Built so far as the
+status panel and route map (and `/metrics` for Prometheus); the console
+commands below are ideas, not built:
 
 - `status`: real pod name, node, uptime, git commit, image tag, ArgoCD sync state
 - `deploys`: the last few CI runs and commits
@@ -85,8 +98,6 @@ Result: fewer elements, all working. The look and sound stay; everything you
 read or click is true. The panels showing live infrastructure are what make it
 a DevOps portfolio instead of a theme.
 
-Open question to settle with fresh eyes: does this match what felt wrong?
-
 ## Where it runs (live since 2026-10-20)
 
 https://barrypekerman.com (and www). Nothing about the site lives in The
@@ -113,3 +124,4 @@ site with it.
 7. [x] Uplink styling, music/sfx toggles
 8. [x] Remove k8s mode and `connect sandbox` (The Handover is the real shell)
 9. [x] Make the repo public
+10. [x] DevOps review fixes (2026-10-23): session limits, CSP and vendored scripts, `/metrics`, CI pinning, image scanning and signing, a browser page check in CI
