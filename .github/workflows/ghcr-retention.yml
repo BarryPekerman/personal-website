@@ -1,10 +1,12 @@
 name: GHCR retention
 
-# CI pushes ghcr.io/barrypekerman/personal-website:<sha> (and :latest) on every
-# merge to main, and GHCR keeps them all forever. This keeps the newest
-# KEEP tagged images and deletes the rest. Each tag is a multi-arch index with
-# platform children (and buildx attestations); the action deletes those with
-# their parent, so a kept tag is never left half-pulled.
+# CI pushes ghcr.io/barrypekerman/personal-website:<sha> on every merge to
+# main, and GHCR keeps them all forever. This keeps the newest KEEP tagged
+# images and deletes the rest. Each tag is a multi-arch index with platform
+# children, buildx attestations (SBOM, provenance) and a cosign signature
+# (a sha256-<digest> tag); the action counts and deletes those with their
+# parent, so a kept tag is never left half-pulled or unsigned. CI no longer
+# pushes :latest; the last image tagged so ages out like any other.
 #
 # The deployed tag (oke-gitops portfolio/deployment.yaml) is normally the
 # newest, so it's always kept unless a rollback pins something older than
@@ -37,8 +39,8 @@ jobs:
         with:
           package: personal-website
           keep-n-tagged: ${{ env.KEEP }}
-          exclude-tags: latest
           delete-untagged: true
+          delete-orphaned-images: true
           delete-partial-images: true
           validate: true
           # scheduled runs delete; manual runs default to a dry run

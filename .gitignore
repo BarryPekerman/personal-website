@@ -16,6 +16,7 @@
 !internal/handlers/
 !internal/shell/
 !internal/status/
+!scripts/
 !web/
 !web/static/
 !web/static/css/
@@ -43,6 +44,7 @@
 !cmd/server/pages.go
 !cmd/server/pages_test.go
 !internal/geo/geo.go
+!internal/geo/geo_test.go
 !internal/geo/places.json
 !internal/geo/gen/main.go
 !internal/handlers/terminal.go
@@ -53,6 +55,9 @@
 !internal/shell/virtual_test.go
 !internal/status/status.go
 !internal/status/status_test.go
+
+# Browser check (CI's page job)
+!scripts/pagecheck.py
 
 # What visitors browse in the terminal (embedded in the binary)
 !content/.motd
