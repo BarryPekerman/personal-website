@@ -30,57 +30,10 @@ func main() {
 		logger.SetLevel(logrus.DebugLevel)
 	}
 
-	// The shell is simulated: nothing a visitor types runs anywhere
-	shellManager := shell.NewVirtualManager(content.FS, logger)
-	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
-
-	pages, err := newPages(commit)
+	handler, err := newHandler(configFromEnv(), logger)
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to load the page templates")
+		logger.WithError(err).Fatal("Failed to set up the server")
 	}
-	static, err := fs.Sub(web.FS, "static")
-	if err != nil {
-		logger.WithError(err).Fatal("Failed to load the static files")
-	}
-
-	mux := http.NewServeMux()
-	// Static files are requested with ?v=<asset version>, so a deploy changes
-	// every URL and they can be cached for long
-	mux.Handle("GET /static/", cacheFor(24*time.Hour, http.StripPrefix("/static/", noListing(http.FileServerFS(static)))))
-	// Front page: Uplink-style HUD around the terminal; /terminal is the
-	// terminal alone, full screen
-	mux.Handle("GET /{$}", pages.handler("home.html"))
-	mux.Handle("GET /terminal", pages.handler("index.html"))
-	// The same files the terminal shows, read-only, for the phone layout
-	// (which renders them as text instead of opening a terminal)
-	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
-	statusInfo := status.Info{
-		Pod:     os.Getenv("POD_NAME"),
-		Node:    os.Getenv("NODE_NAME"),
-		Region:  os.Getenv("REGION"),
-		Commit:  commit,
-		Started: time.Now().UTC(),
-	}
-	// DEV_VISITOR=IL/TLV previews the route map locally, where requests carry
-	// no Cloudflare headers
-	if country, colo, ok := strings.Cut(os.Getenv("DEV_VISITOR"), "/"); ok {
-		statusInfo.DevVisitor = status.Visitor{Country: country, Colo: colo}
-	}
-	handoverURL := os.Getenv("HANDOVER_HEALTHZ_URL")
-	if handoverURL == "" {
-		handoverURL = "https://play.barrypekerman.com/healthz"
-	}
-	// TUNNEL_METRICS_URL is cloudflared's /metrics in the cluster (unset
-	// locally: the map then shows no tunnel connections)
-	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminal.ActiveSessions, status.Sources{
-		HandoverHealthz: handoverURL,
-		TunnelMetrics:   os.Getenv("TUNNEL_METRICS_URL"),
-		TTL:             30 * time.Second,
-	}))
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /ws", terminal.HandleWebSocket)
 
 	addr := ":8080"
 	if port := os.Getenv("PORT"); port != "" {
@@ -88,7 +41,7 @@ func main() {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           securityHeaders(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -111,6 +64,83 @@ func main() {
 	}
 
 	logger.Info("Server exited")
+}
+
+// config is what the server reads from its environment
+type config struct {
+	commit            string
+	pod, node, region string // Downward API and the cluster's region
+	devVisitor        string // DEV_VISITOR=IL/TLV
+	handoverURL       string // The Handover's /healthz
+	tunnelMetricsURL  string // cloudflared's /metrics
+}
+
+func configFromEnv() config {
+	c := config{
+		commit:           commit,
+		pod:              os.Getenv("POD_NAME"),
+		node:             os.Getenv("NODE_NAME"),
+		region:           os.Getenv("REGION"),
+		devVisitor:       os.Getenv("DEV_VISITOR"),
+		handoverURL:      os.Getenv("HANDOVER_HEALTHZ_URL"),
+		tunnelMetricsURL: os.Getenv("TUNNEL_METRICS_URL"),
+	}
+	if c.handoverURL == "" {
+		c.handoverURL = "https://play.barrypekerman.com/healthz"
+	}
+	return c
+}
+
+// newHandler builds every route, wrapped in the security headers
+func newHandler(c config, logger *logrus.Logger) (http.Handler, error) {
+	// The shell is simulated: nothing a visitor types runs anywhere
+	shellManager := shell.NewVirtualManager(content.FS, logger)
+	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
+
+	pages, err := newPages(c.commit)
+	if err != nil {
+		return nil, err
+	}
+	static, err := fs.Sub(web.FS, "static")
+	if err != nil {
+		return nil, err
+	}
+
+	mux := http.NewServeMux()
+	// Static files are requested with ?v=<asset version>, so a deploy changes
+	// every URL and they can be cached for long
+	mux.Handle("GET /static/", cacheFor(24*time.Hour, http.StripPrefix("/static/", noListing(http.FileServerFS(static)))))
+	// Front page: Uplink-style HUD around the terminal; /terminal is the
+	// terminal alone, full screen
+	mux.Handle("GET /{$}", pages.handler("home.html"))
+	mux.Handle("GET /terminal", pages.handler("index.html"))
+	// The same files the terminal shows, read-only, for the phone layout
+	// (which renders them as text instead of opening a terminal)
+	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
+	statusInfo := status.Info{
+		Pod:     c.pod,
+		Node:    c.node,
+		Region:  c.region,
+		Commit:  c.commit,
+		Started: time.Now().UTC(),
+	}
+	// DEV_VISITOR=IL/TLV previews the route map locally, where requests carry
+	// no Cloudflare headers
+	if country, colo, ok := strings.Cut(c.devVisitor, "/"); ok {
+		statusInfo.DevVisitor = status.Visitor{Country: country, Colo: colo}
+	}
+	// The tunnel metrics URL is unset locally: the map then shows no tunnel
+	// connections
+	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminal.ActiveSessions, status.Sources{
+		HandoverHealthz: c.handoverURL,
+		TunnelMetrics:   c.tunnelMetricsURL,
+		TTL:             30 * time.Second,
+	}))
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /ws", terminal.HandleWebSocket)
+	return securityHeaders(mux), nil
 }
 
 // noListing serves files but not directory listings: a path naming a
