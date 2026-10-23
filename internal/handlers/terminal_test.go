@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"portfolio/internal/shell"
 )
 
@@ -160,9 +161,13 @@ func TestPerIPLimit(t *testing.T) {
 	readUntil(t, a, "$ ")
 	b := dial(t, srv, "2001:db8:1:2::ffff")
 	readUntil(t, b, "$ ")
+	refused := testutil.ToFloat64(sessionsRefused.WithLabelValues("address"))
 	c := dial(t, srv, "2001:db8:1:2:aaaa::1")
 	if code, text := closeReason(t, c); code != websocket.CloseTryAgainLater || !strings.Contains(text, "your address") {
 		t.Errorf("third session from the /64: close %d %q, want %d about the address", code, text, websocket.CloseTryAgainLater)
+	}
+	if n := testutil.ToFloat64(sessionsRefused.WithLabelValues("address")) - refused; n != 1 {
+		t.Errorf("refusal counted %v times, want 1", n)
 	}
 	// Another visitor isn't affected
 	d := dial(t, srv, "203.0.113.7")
@@ -202,10 +207,14 @@ func TestIdleSessionClosed(t *testing.T) {
 		}
 	}
 	readUntil(t, ws, "xxxx")
+	idle := testutil.ToFloat64(sessionsEnded.WithLabelValues("idle"))
 	if code, text := closeReason(t, ws); code != websocket.CloseNormalClosure || !strings.Contains(text, "without input") {
 		t.Errorf("idle close: %d %q", code, text)
 	}
 	waitSessions(t, h, 0)
+	if n := testutil.ToFloat64(sessionsEnded.WithLabelValues("idle")) - idle; n != 1 {
+		t.Errorf("idle end counted %v times, want 1", n)
+	}
 }
 
 func TestDeadPeerDropped(t *testing.T) {
@@ -214,9 +223,13 @@ func TestDeadPeerDropped(t *testing.T) {
 	srv, h := newLimitedServer(t, limits)
 
 	// A client that never reads never answers pings: gone within three intervals
+	timeouts := testutil.ToFloat64(sessionsEnded.WithLabelValues("timeout"))
 	dial(t, srv, "")
 	waitSessions(t, h, 1)
 	waitSessions(t, h, 0)
+	if n := testutil.ToFloat64(sessionsEnded.WithLabelValues("timeout")) - timeouts; n != 1 {
+		t.Errorf("timeout counted %v times, want 1", n)
+	}
 
 	// One that reads (and so answers pings) stays
 	ws := dial(t, srv, "")

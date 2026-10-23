@@ -74,6 +74,7 @@ something true. Everything else goes.**
 | Name-cracking intro | 1.5 s flavor | keep, short and skippable |
 | Contract: The Handover | fake | **make real:** live seats from `play.barrypekerman.com/healthz`, button into the game (landing page, never `/play`) |
 | Remote systems (projects) | text only | **make real:** each opens repo, short write-up, live demo if any |
+| Metrics | `:9090/metrics` (`METRICS_ADDR`), separate from the site port so the tunnel never serves it; scraping it needs the port on the Service and a ServiceMonitor in `oke-gitops` (review H5) |
 | Status panel | made-up numbers | **make real:** pod + node via the Downward API, git commit baked in at build, real uptime |
 | Route map | decoration | **make real or cut:** draw the actual path from Cloudflare headers (visitor country, edge location such as TLV) → OKE region → this pod |
 | Trace meter | meaningless | cut |

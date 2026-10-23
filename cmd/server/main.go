@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"portfolio/content"
 	terminalHandlers "portfolio/internal/handlers"
 	"portfolio/internal/shell"
@@ -31,7 +32,7 @@ func main() {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
-	handler, err := newHandler(configFromEnv(), logger)
+	handler, err := newHandler(configFromEnv(), logger, prometheus.DefaultRegisterer)
 	if err != nil {
 		logger.Error("Failed to set up the server", "err", err)
 		os.Exit(1)
@@ -46,6 +47,23 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+
+	metricsAddr := os.Getenv("METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = ":9090"
+	}
+	metricsSrv := &http.Server{
+		Addr:              metricsAddr,
+		Handler:           metricsHandler(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		logger.Info("Serving metrics", "addr", metricsAddr)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("Failed to serve metrics", "err", err)
+			os.Exit(1)
+		}
+	}()
 
 	go func() {
 		logger.Info("Starting portfolio terminal server", "addr", addr)
@@ -62,6 +80,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	_ = metricsSrv.Shutdown(ctx)
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("Server forced to shutdown", "err", err)
 		os.Exit(1)
@@ -95,11 +114,18 @@ func configFromEnv() config {
 	return c
 }
 
-// newHandler builds every route, wrapped in the security headers
-func newHandler(c config, logger *slog.Logger) (http.Handler, error) {
+// newHandler builds every route, wrapped in the security headers. The gauge of
+// open sessions goes to reg.
+func newHandler(c config, logger *slog.Logger, reg prometheus.Registerer) (http.Handler, error) {
 	// The shell is simulated: nothing a visitor types runs anywhere
 	shellManager := shell.NewVirtualManager(content.FS, logger)
 	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
+	if err := reg.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "portfolio_terminal_sessions",
+		Help: "Terminal sessions open right now.",
+	}, func() float64 { return float64(terminal.ActiveSessions()) })); err != nil {
+		return nil, err
+	}
 
 	statusInfo := status.Info{
 		Pod:     c.pod,
@@ -137,14 +163,14 @@ func newHandler(c config, logger *slog.Logger) (http.Handler, error) {
 	mux := http.NewServeMux()
 	// Static files are requested with ?v=<asset version>, so a deploy changes
 	// every URL and they can be cached for long
-	mux.Handle("GET /static/", cacheFor(24*time.Hour, http.StripPrefix("/static/", noListing(http.FileServerFS(static)))))
+	mux.Handle("GET /static/", instrument("static", cacheFor(24*time.Hour, http.StripPrefix("/static/", noListing(http.FileServerFS(static))))))
 	// Front page: Uplink-style HUD around the terminal; /terminal is the
 	// terminal alone, full screen
-	mux.Handle("GET /{$}", pages.handler("home.html"))
-	mux.Handle("GET /terminal", pages.handler("index.html"))
+	mux.Handle("GET /{$}", instrument("home", pages.handler("home.html")))
+	mux.Handle("GET /terminal", instrument("terminal", pages.handler("index.html")))
 	// The same files the terminal shows, read-only, for the phone layout
 	// (which renders them as text instead of opening a terminal)
-	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
+	mux.Handle("GET /api/content/", instrument("content", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS)))))
 	// The project list, built from the write-ups in content/projects
 	projects, err := content.Projects(content.FS)
 	if err != nil {
@@ -154,11 +180,11 @@ func newHandler(c config, logger *slog.Logger) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, _ *http.Request) {
+	mux.Handle("GET /api/projects", instrument("projects", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(projectsJSON)
-	})
-	mux.Handle("GET /api/status", statusHandler)
+	})))
+	mux.Handle("GET /api/status", instrument("status", statusHandler))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})

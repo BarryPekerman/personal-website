@@ -11,14 +11,50 @@ import (
 	"net/http"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"portfolio/internal/shell"
 )
 
 // maxMessageSize caps a single WebSocket message (one keystroke or a paste)
 const maxMessageSize = 4096
+
+// Terminal session metrics, served on /metrics
+var (
+	sessionsStarted = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "portfolio_terminal_sessions_started_total",
+		Help: "Terminal sessions started.",
+	})
+	sessionsRefused = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "portfolio_terminal_sessions_refused_total",
+		Help: "Terminal sessions refused, by limit: full (all sessions) or address (per visitor).",
+	}, []string{"limit"})
+	sessionsEnded = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "portfolio_terminal_sessions_ended_total",
+		Help: "Terminal sessions ended, by reason: idle (no input), timeout (the browser stopped answering) or closed (the visitor left or typed exit).",
+	}, []string{"reason"})
+	sessionErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "portfolio_terminal_errors_total",
+		Help: "Failures setting up a terminal session, by stage: upgrade, create or start.",
+	}, []string{"stage"})
+)
+
+func init() {
+	// Every label value shows from the start, at zero
+	for _, l := range []string{"full", "address"} {
+		sessionsRefused.WithLabelValues(l)
+	}
+	for _, r := range []string{"idle", "timeout", "closed"} {
+		sessionsEnded.WithLabelValues(r)
+	}
+	for _, st := range []string{"upgrade", "create", "start"} {
+		sessionErrors.WithLabelValues(st)
+	}
+}
 
 // writeWait is how long a write may block on a peer that stopped reading
 const writeWait = 10 * time.Second
@@ -102,9 +138,11 @@ func (h *TerminalHandler) acquire(addr netip.Prefix) (string, string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.total >= h.limits.MaxSessions {
+		sessionsRefused.WithLabelValues("full").Inc()
 		return "", "The server is full. Try again in a few minutes."
 	}
 	if h.perIP[addr] >= h.limits.MaxPerIP {
+		sessionsRefused.WithLabelValues("address").Inc()
 		return "", "Too many terminals open from your address. Close one and reload."
 	}
 	h.total++
@@ -145,6 +183,7 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	ws, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("Failed to upgrade connection to WebSocket", "err", err)
+		sessionErrors.WithLabelValues("upgrade").Inc()
 		return
 	}
 	defer ws.Close() //nolint:errcheck // nothing useful to do if closing fails
@@ -164,6 +203,7 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	session, err := h.shellManager.CreateSession(sessionID)
 	if err != nil {
 		log.Error("Failed to create shell session", "err", err)
+		sessionErrors.WithLabelValues("create").Inc()
 		h.sendError(ws, "Failed to create terminal session. Please try again.")
 		return
 	}
@@ -175,10 +215,17 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 
 	if err := session.Start(); err != nil {
 		log.Error("Failed to start shell session", "err", err)
+		sessionErrors.WithLabelValues("start").Inc()
 		h.sendError(ws, "Failed to start shell session.")
 		return
 	}
 	log.Info("Shell session started")
+	sessionsStarted.Inc()
+	// keepAlive or pumpInput may name why the session ended; otherwise the
+	// visitor closed it
+	var ended atomic.Value
+	ended.Store("closed")
+	defer func() { sessionsEnded.WithLabelValues(ended.Load().(string)).Inc() }()
 
 	// Nothing else writes yet: the output pump starts below
 	if h.Edge != nil {
@@ -198,16 +245,16 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	input := make(chan struct{}, 1)
 	done := make(chan struct{})
 	defer close(done)
-	go h.keepAlive(ws, input, done, log)
+	go h.keepAlive(ws, input, done, &ended, log)
 
-	go h.pumpInput(ws, session, input, deadline, log)
+	go h.pumpInput(ws, session, input, deadline, &ended, log)
 	h.pumpOutput(ws, session, log)
 }
 
 // keepAlive pings the browser until done is closed, and ends the session
 // after limits.Idle without input. Closing the connection unblocks both
 // pumps. WriteControl and Close are safe to call alongside pumpOutput's writes.
-func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, done <-chan struct{}, log *slog.Logger) {
+func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, done <-chan struct{}, ended *atomic.Value, log *slog.Logger) {
 	ticker := time.NewTicker(h.limits.Ping)
 	defer ticker.Stop()
 	idle := time.NewTimer(h.limits.Idle)
@@ -220,6 +267,7 @@ func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, d
 			idle.Reset(h.limits.Idle)
 		case <-idle.C:
 			log.Info("Closing idle session")
+			ended.Store("idle")
 			h.closeWith(ws, websocket.CloseNormalClosure,
 				fmt.Sprintf("Session closed after %v without input.", h.limits.Idle))
 			return
@@ -244,7 +292,7 @@ func (h *TerminalHandler) closeWith(ws *websocket.Conn, code int, reason string)
 
 // pumpInput forwards browser messages to the shell until the connection
 // closes. Each message pushes back the read deadline and the idle timer.
-func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, input chan<- struct{}, deadline func() error, log *slog.Logger) {
+func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, input chan<- struct{}, deadline func() error, ended *atomic.Value, log *slog.Logger) {
 	// Closing stdin tells the shell the visitor has gone
 	defer func() {
 		if closer, ok := session.Writer().(io.Closer); ok {
@@ -255,6 +303,10 @@ func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, i
 	for {
 		messageType, data, err := ws.ReadMessage()
 		if err != nil {
+			// The read deadline passed: the browser stopped answering pings
+			if ne, ok := errors.AsType[net.Error](err); ok && ne.Timeout() {
+				ended.Store("timeout")
+			}
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Debug("WebSocket closed", "err", err)
 			}
