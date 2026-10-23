@@ -56,7 +56,8 @@ jobs:
         run: pip install --break-system-packages "playwright==${PLAYWRIGHT_VERSION}"
       - name: Start the server
         run: |
-          go build -o portfolio ./cmd/server
+          # no VCS stamping: in the container, git won't read a checkout another user owns
+          go build -buildvcs=false -o portfolio ./cmd/server
           DEV_VISITOR=IL/TLV ./portfolio > server.log 2>&1 &
           python3 - <<'PY' || { cat server.log; exit 1; }
           import time, urllib.request
