@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -404,41 +405,44 @@ func (s *VirtualSession) cmdHistory(_ []string) {
 	s.print(b.String())
 }
 
-// knownHosts are the systems `connect` can reach; everything else gets traced
+// knownHosts are the systems `connect` knows: it prints where they are, and
+// the terminal makes the address a link
 var knownHosts = map[string]string{
-	"github": "https://github.com/BarryPekerman",
+	"github":   "https://github.com/BarryPekerman",
+	"handover": "https://play.barrypekerman.com/",
 }
 
 func (s *VirtualSession) cmdConnect(args []string) {
+	names := make([]string, 0, len(knownHosts))
+	for name := range knownHosts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	known := strings.Join(names, ", ")
+
 	if len(args) == 0 {
-		s.print("usage: connect <address>\n")
+		s.print(fmt.Sprintf("usage: connect <system>   (known: %s)\n", known))
 		return
 	}
 	host := strings.ToLower(args[0])
-	s.print(fmt.Sprintf("Connecting to %s", host))
-	for i := 0; i < 3; i++ {
-		time.Sleep(250 * time.Millisecond)
-		s.print(".")
-	}
-	s.print("\n")
-
 	if url, ok := knownHosts[host]; ok {
-		s.print(fmt.Sprintf("%sConnected.%s %s\n", colorGreen, colorReset, url))
+		s.print(fmt.Sprintf("%s: %s (click to open in your browser)\n", host, url))
 		return
 	}
-	s.print(fmt.Sprintf("%sAccess denied.%s Trace detected - disconnecting.\n", colorRed, colorReset))
+	s.print(fmt.Sprintf("connect: unknown system '%s' (known: %s)\n", args[0], known))
 }
 
 func (s *VirtualSession) cmdUname(args []string) {
 	if len(args) > 0 && args[0] == "-a" {
-		s.print("Linux portfolio 6.6.6-virtual x86_64 GNU/Linux (simulated shell)\n")
+		// The architecture is the server's; there is no kernel behind this shell
+		s.print(fmt.Sprintf("Linux portfolio (simulated shell, no kernel) %s\n", runtime.GOARCH))
 		return
 	}
 	s.print("Linux\n")
 }
 
 func (s *VirtualSession) cmdSudo(_ []string) {
-	s.print("guest is not in the sudoers file. This incident will be reported.\n")
+	s.print("sudo: guest is not in the sudoers file (and nothing typed here runs anywhere: this shell is simulated)\n")
 }
 
 func (s *VirtualSession) cmdRm(args []string) {
@@ -449,11 +453,38 @@ func (s *VirtualSession) cmdRm(args []string) {
 	s.print(fmt.Sprintf("rm: cannot remove '%s': Read-only file system\n", args[len(args)-1]))
 }
 
-// isSelfDestruct spots the classic destructive one-liners
+// isSelfDestruct spots the classic destructive one-liners: a fork bomb, or a
+// command (in any part of a list or pipeline, sudo or not) that is a
+// recursive rm, mkfs or dd. Whole commands only: "echo I love mkfs" is fine.
 func isSelfDestruct(line string) bool {
-	l := strings.ToLower(strings.Join(strings.Fields(line), " "))
-	for _, pattern := range []string{"rm -rf /", "rm -fr /", "sudo rm", ":(){", "mkfs", "dd if="} {
-		if strings.Contains(l, pattern) {
+	if strings.HasPrefix(strings.Join(strings.Fields(line), ""), ":(){") {
+		return true
+	}
+	for _, part := range strings.FieldsFunc(strings.ToLower(line), func(r rune) bool {
+		return r == ';' || r == '&' || r == '|'
+	}) {
+		f := strings.Fields(part)
+		sudo := len(f) > 0 && f[0] == "sudo"
+		if sudo {
+			f = f[1:]
+		}
+		if len(f) == 0 {
+			continue
+		}
+		switch {
+		case f[0] == "rm" && (sudo || recursive(f[1:])),
+			strings.HasPrefix(f[0], "mkfs"),
+			f[0] == "dd" && len(f) > 1:
+			return true
+		}
+	}
+	return false
+}
+
+// recursive reports whether rm's arguments ask for -r
+func recursive(args []string) bool {
+	for _, a := range args {
+		if a == "--recursive" || (strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsAny(a, "rR")) {
 			return true
 		}
 	}

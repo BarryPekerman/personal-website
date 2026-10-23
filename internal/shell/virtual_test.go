@@ -282,6 +282,32 @@ func TestSelfDestruct(t *testing.T) {
 	}
 }
 
+func TestIsSelfDestruct(t *testing.T) {
+	for line, want := range map[string]bool{
+		"rm -rf /":                    true,
+		"rm -fr ~":                    true,
+		"rm -r --no-preserve-root /":  true,
+		"sudo rm cv.txt":              true,
+		"ls && rm -rf /":              true,
+		"cat cv.txt | sudo rm x":      true,
+		"mkfs.ext4 /dev/sda1":         true,
+		"dd if=/dev/zero of=/dev/sda": true,
+		":(){ :|:& };:":               true,
+		": () { : | : & } ; :":        true,
+		"echo I love mkfs":            false,
+		"echo rm -rf /":               false,
+		"cat dd.txt":                  false,
+		"rm cv.txt":                   false,
+		"rm --force cv.txt":           false,
+		"rmdir projects":              false,
+		"dd":                          false,
+	} {
+		if got := isSelfDestruct(line); got != want {
+			t.Errorf("isSelfDestruct(%q) = %v, want %v", line, got, want)
+		}
+	}
+}
+
 func TestCloseEndsSession(t *testing.T) {
 	h := newHarness(t)
 	if err := h.session.Close(); err != nil {
@@ -334,7 +360,8 @@ func TestConnect(t *testing.T) {
 	tests := []struct{ cmd, want string }{
 		{"connect", "usage: connect"},
 		{"connect github", "https://github.com/BarryPekerman"},
-		{"connect nsa", "Access denied"},
+		{"connect handover", "https://play.barrypekerman.com/"},
+		{"connect nsa", "unknown system 'nsa' (known: github, handover)"},
 	}
 	for _, tt := range tests {
 		if out := h.run(tt.cmd); !strings.Contains(out, tt.want) {
