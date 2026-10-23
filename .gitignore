@@ -18,7 +18,9 @@
 !internal/status/
 !web/
 !web/static/
+!web/static/css/
 !web/static/js/
+!web/static/vendor/
 !web/templates/
 
 # Repo root
@@ -38,6 +40,8 @@
 # Server
 !cmd/server/main.go
 !cmd/server/main_test.go
+!cmd/server/pages.go
+!cmd/server/pages_test.go
 !internal/geo/geo.go
 !internal/geo/places.json
 !internal/geo/gen/main.go
@@ -61,12 +65,27 @@
 !content/projects/terraform-aws-chatops.md
 !content/projects/the-handover.md
 
-# Front end
+# Front end (embedded in the binary)
+!web/web.go
+!web/static/css/home.css
+!web/static/css/terminal-page.css
 !web/static/js/audio.js
+!web/static/js/home.js
 !web/static/js/routemap.js
+!web/static/js/terminal-page.js
 !web/static/js/terminal.js
 !web/templates/home.html
 !web/templates/index.html
+
+# Third-party front end, as published on npm (versions in web/static/vendor/README.md)
+!web/static/vendor/README.md
+!web/static/vendor/LICENSE.*
+!web/static/vendor/addon-fit.js
+!web/static/vendor/addon-web-links.js
+!web/static/vendor/land-110m.json
+!web/static/vendor/topojson-client.min.js
+!web/static/vendor/xterm.css
+!web/static/vendor/xterm.js
 
 # Docs
 !docs/NOTES.md
