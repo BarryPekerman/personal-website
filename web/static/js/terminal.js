@@ -44,7 +44,8 @@ class PortfolioTerminal {
             this.term.write(decoder.decode(event.data, { stream: true }));
             if (this.onOutput) this.onOutput();
         };
-        ws.onclose = () => this.term.write('\r\n\x1b[1;33mConnection closed. Reload to reconnect.\x1b[0m\r\n');
+        // the server says why it closed (idle, too many sessions) in the close frame
+        ws.onclose = e => this.term.write(`\r\n\x1b[1;33m${e.reason || 'Connection closed.'} Reload to reconnect.\x1b[0m\r\n`);
         ws.onerror = () => this.term.write('\r\n\x1b[1;31mConnection error.\x1b[0m\r\n');
         return ws;
     }
