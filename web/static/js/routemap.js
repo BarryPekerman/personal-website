@@ -24,6 +24,7 @@ class RouteMap {
 
   resize() {
     const r = this.svg.getBoundingClientRect();
+    if (!r.width) return;  // hidden (the other layout's map): drawn once it shows
     const W = Math.max(200, Math.round(r.width)), H = Math.max(120, Math.round(r.height));
     if (W === this.W && H === this.H && this.svg.hasAttribute('viewBox')) return;
     this.W = W; this.H = H;
@@ -40,8 +41,9 @@ class RouteMap {
 
   async loadLand() {
     try {
-      const r = await fetch('/static/vendor/land-110m.json');
-      const topo = await r.json();
+      // one download for every map on the page
+      RouteMap.land = RouteMap.land || fetch('/static/vendor/land-110m.json').then(r => r.json());
+      const topo = await RouteMap.land;
       const land = topojson.feature(topo, topo.objects.land);
       const polys = land.features.flatMap(f =>
         f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates);
@@ -80,6 +82,8 @@ class RouteMap {
   }
 
   render() {
+    // a hidden map isn't drawn; the ResizeObserver redraws it when it shows
+    if (!this.svg.getBoundingClientRect().width) return;
     const v = this.view();
     const k = this.W / v.span;  // pixels per degree
     const px = ([lat, lon]) => [(lon - v.lon0) * k, (v.lat1 - lat) * k];

@@ -25,9 +25,33 @@ const routeMap = new RouteMap($('map'));
 const phoneMap = new RouteMap($('p-map'));
 
 // ---------- terminal: desktop only, started when the desktop layout shows ----------
-let terminal = null;
-function initDesktop() {
-  if (terminal || PHONE.matches) return;
+// xterm.js and the terminal client are loaded only for the desktop layout:
+// a phone never shows the terminal, so it doesn't download them
+const VERSION = new URL(document.currentScript.src).searchParams.get('v');
+function loadScript(path) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = path + '?v=' + VERSION;
+    s.async = false;  // run in the order added
+    s.onload = resolve; s.onerror = reject;
+    document.body.append(s);
+  });
+}
+let terminal = null, loading = false;
+async function initDesktop() {
+  if (terminal || loading || PHONE.matches) return;
+  loading = true;
+  const css = document.createElement('link');
+  css.rel = 'stylesheet'; css.href = '/static/vendor/xterm.css?v=' + VERSION;
+  document.head.append(css);
+  try {
+    await Promise.all(['/static/vendor/xterm.js', '/static/vendor/addon-fit.js',
+      '/static/vendor/addon-web-links.js', '/static/js/terminal.js'].map(loadScript));
+  } catch (e) {
+    $('terminal').textContent = 'The terminal could not load. Reload to try again.';
+    loading = false;
+    return;
+  }
   terminal = new PortfolioTerminal($('terminal'), {
     fontSize: 13,
     fontFamily: 'ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace',
@@ -37,6 +61,7 @@ function initDesktop() {
     onOutput: () => routeMap.packet('in'),
     onEdge: e => { edge = { country: e.country, colo: e.colo, via: 'terminal connection' }; refreshStatus(); },
   });
+  if (bootDone) terminal.term.focus();
 }
 initDesktop();
 PHONE.addEventListener('change', initDesktop);
@@ -202,7 +227,9 @@ async function refreshStatus() {
   }
 }
 refreshStatus();
-setInterval(refreshStatus, 15000);
+// no polling while the tab is hidden; catch up when it shows again
+setInterval(() => { if (!document.hidden) refreshStatus(); }, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStatus(); });
 
 // ---------- phone: projects and CV as text, from the files the terminal shows ----------
 async function contentText(path) {
