@@ -8,21 +8,15 @@ page shows the real deployment serving it and the visitor's route to it.
 ## How it works
 
 ```
-browser (xterm.js) ──WebSocket──► Go server ──► shell backend
-  keystrokes as {"type":"input"}                 virtual | local | k8s
+browser (xterm.js) ──WebSocket──► Go server ──► virtual shell
+  keystrokes as {"type":"input"}                 (reads files embedded from content/)
   ◄── raw terminal output (binary frames)
 ```
 
 The browser only renders. The server owns the shell: echo, prompt, line
-editing, history and tab completion all happen server-side.
-
-### Shell backends (`APP_MODE`)
-
-| Mode | What runs | Use |
-|---|---|---|
-| `virtual` (default) | A simulated shell written in Go, reading files embedded in the binary from `content/` | Production. Nothing a visitor types is executed anywhere. |
-| `local` | Real bash on the host, in `content/` | Development only. **Never expose this.** |
-| `k8s` | Real shell in a throwaway, locked-down pod per visitor | Work in progress (v2) |
+editing, history and tab completion all happen server-side. The shell is
+simulated, written in Go: nothing a visitor types is executed anywhere. For a
+real, isolated shell, see [The Handover](https://play.barrypekerman.com/).
 
 ## Run it
 
@@ -47,15 +41,13 @@ CI runs the build, tests, linter, `govulncheck` and a Docker build on every push
 ## Layout
 
 ```
-cmd/server/        entry point: HTTP routes, picks the shell backend
+cmd/server/        entry point: HTTP routes
 content/           files visitors browse (embedded via go:embed)
 internal/handlers/ WebSocket <-> shell session bridge
-internal/shell/    Session interface + virtual, local and k8s backends
-internal/k8s/      pod lifecycle for k8s mode
+internal/shell/    the virtual shell
 internal/status/   /api/status: the live deployment and the visitor's route
 internal/geo/      positions for the route map (generated: go generate ./internal/geo)
 web/               front page (home.html), full-screen terminal, xterm.js client
-manifests/docker/  guest image for k8s mode
 ```
 
 ## Deploy
@@ -72,4 +64,4 @@ Details and reasoning: [docs/NOTES.md](docs/NOTES.md).
 - [x] Deploy to my OKE cluster via ArgoCD
 - [x] Uplink styling, live status panel and route map
 - [ ] The real CV
-- [ ] Remove k8s mode (The Handover is the real shell)
+- [x] Remove k8s mode (The Handover is the real shell)

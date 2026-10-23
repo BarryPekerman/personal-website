@@ -82,7 +82,7 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		h.sendError(ws, "Failed to start shell session.")
 		return
 	}
-	log.WithField("mode", session.Mode()).Info("Shell session started")
+	log.Info("Shell session started")
 	activeSessions.Add(1)
 	defer activeSessions.Add(-1)
 

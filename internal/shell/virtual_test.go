@@ -334,7 +334,6 @@ func TestConnect(t *testing.T) {
 	tests := []struct{ cmd, want string }{
 		{"connect", "usage: connect"},
 		{"connect github", "https://github.com/BarryPekerman"},
-		{"connect sandbox", "Sandbox offline"},
 		{"connect nsa", "Access denied"},
 	}
 	for _, tt := range tests {

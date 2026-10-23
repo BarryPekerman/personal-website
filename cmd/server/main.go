@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"portfolio/content"
 	terminalHandlers "portfolio/internal/handlers"
-	"portfolio/internal/k8s"
 	"portfolio/internal/shell"
 	"portfolio/internal/status"
 )
@@ -29,32 +28,8 @@ func main() {
 		logger.SetLevel(logrus.DebugLevel)
 	}
 
-	// APP_MODE picks the shell backend:
-	//   virtual (default) - built-in simulated shell, nothing runs on the host
-	//   local             - real bash on this machine; development only, never expose it
-	//   k8s               - real shell in a throwaway pod per visitor (work in progress)
-	var shellManager shell.Manager
-	appMode := os.Getenv("APP_MODE")
-	switch appMode {
-	case "", "virtual":
-		appMode = "virtual"
-		shellManager = shell.NewVirtualManager(content.FS, logger)
-	case "local":
-		contentPath := os.Getenv("CONTENT_PATH")
-		if contentPath == "" {
-			contentPath = "./content"
-		}
-		logger.Warn("LOCAL mode runs a real shell on this host - development only, never expose it")
-		shellManager = shell.NewLocalManager(logger, contentPath)
-	case "k8s":
-		k8sClient, err := k8s.NewClient(logger)
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to create Kubernetes client")
-		}
-		shellManager = shell.NewK8sManager(k8sClient, logger)
-	default:
-		logger.WithField("mode", appMode).Fatal("Unknown APP_MODE (use virtual, local or k8s)")
-	}
+	// The shell is simulated: nothing a visitor types runs anywhere
+	shellManager := shell.NewVirtualManager(content.FS, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", noListing(http.FileServer(http.Dir("web/static")))))
@@ -108,7 +83,7 @@ func main() {
 	}
 
 	go func() {
-		logger.WithFields(logrus.Fields{"mode": appMode, "addr": addr}).Info("Starting portfolio terminal server")
+		logger.WithField("addr", addr).Info("Starting portfolio terminal server")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.WithError(err).Fatal("Failed to start server")
 		}

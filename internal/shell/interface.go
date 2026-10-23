@@ -1,17 +1,14 @@
-// Package shell provides the terminal backends behind a visitor session:
-// a simulated shell (virtual), the host shell (local, development only), and
-// a shell in a throwaway Kubernetes pod (k8s).
+// Package shell provides the terminal behind a visitor session: a simulated
+// shell that only reads files embedded in the binary.
 package shell
 
 import (
 	"io"
 )
 
-// Session defines what our web server needs to interact with a terminal session.
-// This abstraction allows us to swap between Kubernetes pods and local processes
-// without changing the WebSocket handling code.
+// Session is what the WebSocket handler needs from a terminal session
 type Session interface {
-	// Start launches the process (Pod exec or Local Command)
+	// Start launches the shell
 	Start() error
 
 	// Resize handles window size changes from xterm.js
@@ -26,11 +23,8 @@ type Session interface {
 	// Writer returns the stream to write shell input to
 	Writer() io.Writer
 
-	// Close cleans up resources (closes streams, terminates process)
+	// Close cleans up resources (closes streams, ends the shell)
 	Close() error
-
-	// Mode returns the session mode ("local" or "k8s")
-	Mode() string
 }
 
 // Manager creates new shell sessions
