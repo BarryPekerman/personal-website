@@ -14,7 +14,7 @@ permissions:
 env:
   GOLANGCI_LINT_VERSION: v2.14.0
   GOVULNCHECK_VERSION: v1.9.0
-  PLAYWRIGHT_VERSION: 1.63.0
+  PLAYWRIGHT_VERSION: 1.63.0 # and the page job's container tag
   IMAGE: ghcr.io/barrypekerman/personal-website
 
 jobs:
@@ -44,24 +44,31 @@ jobs:
   # uploaded either way.
   page:
     runs-on: ubuntu-24.04
+    # Playwright's image has Chromium and its system libraries already: no
+    # 10-minute apt install on every run. Same version as PLAYWRIGHT_VERSION.
+    container: mcr.microsoft.com/playwright/python:v1.63.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-      - name: Install Playwright and Chromium
-        run: |
-          pip install "playwright==${PLAYWRIGHT_VERSION}"
-          playwright install --with-deps chromium
+      - name: Install Playwright for Python
+        run: pip install --break-system-packages "playwright==${PLAYWRIGHT_VERSION}"
       - name: Start the server
         run: |
-          go build -o portfolio ./cmd/server
+          # no VCS stamping: in the container, git won't read a checkout another user owns
+          go build -buildvcs=false -o portfolio ./cmd/server
           DEV_VISITOR=IL/TLV ./portfolio > server.log 2>&1 &
-          for _ in $(seq 30); do curl -fs http://localhost:8080/healthz && exit 0; sleep 1; done
-          cat server.log; exit 1
+          python3 - <<'PY' || { cat server.log; exit 1; }
+          import time, urllib.request
+          for _ in range(30):
+              try:
+                  urllib.request.urlopen("http://localhost:8080/healthz", timeout=1); break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("server did not start")
+          PY
       - name: Check the pages
         run: python scripts/pagecheck.py http://localhost:8080 screenshots
       - name: Upload screenshots
@@ -136,3 +143,50 @@ jobs:
         #     --certificate-identity-regexp '^https://github.com/BarryPekerman/personal-website/' \
         #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
         run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+
+  # After main's image is signed, push the image bump to oke-gitops as a
+  # branch portfolio-<sha7>; oke-gitops' own workflow (deploy-pr.yml) opens it
+  # as a PR and closes older ones. Merging that PR is the deploy: ArgoCD syncs
+  # on oke-gitops' webhook. GITOPS_DEPLOY_KEY is an SSH deploy key for
+  # oke-gitops only (no token with access to other repos).
+  deploy-pr:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    needs: image
+    steps:
+      - name: Push the image bump to oke-gitops
+        env:
+          DEPLOY_KEY: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          short=${SHA:0:7}
+          subject=${MESSAGE%%$'\n'*}
+          # A squash merge ends its subject with "(#18)"; a rebase merge doesn't,
+          # so ask which PR the commit came from
+          if [[ $subject =~ ^(.*)\ \(#([0-9]+)\)$ ]]; then
+            subject=${BASH_REMATCH[1]}; pr=${BASH_REMATCH[2]}
+          else
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '.[0].number // empty')
+          fi
+          title="portfolio $short: $subject${pr:+ (personal-website#$pr)}"
+          body="Deploys BarryPekerman/personal-website@$SHA${pr:+ (BarryPekerman/personal-website#$pr)}. The image was built, scanned with Grype and signed with cosign by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Merging deploys it."
+
+          # SSH with the deploy key; GitHub's host key pinned (from api.github.com/meta)
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/gitops && chmod 600 ~/.ssh/gitops
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/gitops -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+          git clone -q --depth 1 git@github.com:BarryPekerman/oke-gitops.git gitops
+          cd gitops
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          sed -i -E "s|(ghcr.io/barrypekerman/personal-website:)[0-9a-f]{40}|\1$SHA|" portfolio/deployment.yaml
+          if git diff --quiet; then echo "Already deployed"; exit 0; fi
+          git switch -q -c "portfolio-$short"
+          git commit -q -a -m "$title" -m "$body"
+          git push -q origin "portfolio-$short"
+          echo "Pushed portfolio-$short; oke-gitops opens the PR: $title"

@@ -75,8 +75,10 @@ web/               pages (templates/) and static files, embedded in the binary;
 ## Deploy
 
 CI pushes `ghcr.io/barrypekerman/personal-website:<commit>` (signed) on every
-merge to `main`. Deploying is bumping that commit in `oke-gitops` `portfolio/deployment.yaml`;
-ArgoCD does the rest. Where everything runs: [docs/NOTES.md](docs/NOTES.md#where-it-runs-live-since-2026-10-20).
+merge to `main`, then pushes the bump of `portfolio/deployment.yaml` to it to
+`oke-gitops` as a branch (job `deploy-pr`, with a deploy key for that repo
+only); oke-gitops opens it as a PR and closes older ones. Merging that PR
+deploys: GitHub's webhook tells ArgoCD at once. Where everything runs: [docs/NOTES.md](docs/NOTES.md#where-it-runs-live-since-2026-10-20).
 
 ## Roadmap
 
