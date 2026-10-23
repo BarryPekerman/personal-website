@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	terminalHandlers "portfolio/internal/handlers"
 	"portfolio/internal/shell"
 	"portfolio/internal/status"
+	"portfolio/web"
 )
 
 // commit is set at build time: -ldflags "-X main.commit=<sha>"
@@ -32,16 +34,23 @@ func main() {
 	shellManager := shell.NewVirtualManager(content.FS, logger)
 	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
 
+	pages, err := newPages(commit)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to load the page templates")
+	}
+	static, err := fs.Sub(web.FS, "static")
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to load the static files")
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("GET /static/", http.StripPrefix("/static/", noListing(http.FileServer(http.Dir("web/static")))))
+	// Static files are requested with ?v=<asset version>, so a deploy changes
+	// every URL and they can be cached for long
+	mux.Handle("GET /static/", cacheFor(24*time.Hour, http.StripPrefix("/static/", noListing(http.FileServerFS(static)))))
 	// Front page: Uplink-style HUD around the terminal; /terminal is the
 	// terminal alone, full screen
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/templates/home.html")
-	})
-	mux.HandleFunc("GET /terminal", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/templates/index.html")
-	})
+	mux.Handle("GET /{$}", pages.handler("home.html"))
+	mux.Handle("GET /terminal", pages.handler("index.html"))
 	// The same files the terminal shows, read-only, for the phone layout
 	// (which renders them as text instead of opening a terminal)
 	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
@@ -79,7 +88,7 @@ func main() {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

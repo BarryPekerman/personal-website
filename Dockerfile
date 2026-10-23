@@ -13,13 +13,13 @@ RUN go mod download
 COPY cmd ./cmd
 COPY content ./content
 COPY internal ./internal
+COPY web ./web
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.commit=${COMMIT}" -o /out/portfolio ./cmd/server
 
 # Runtime stage: no shell, no package manager, runs as non-root
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/portfolio ./portfolio
-COPY web ./web
 
 EXPOSE 8080
 ENTRYPOINT ["/app/portfolio"]

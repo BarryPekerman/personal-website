@@ -40,7 +40,7 @@ class RouteMap {
 
   async loadLand() {
     try {
-      const r = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json');
+      const r = await fetch('/static/vendor/land-110m.json');
       const topo = await r.json();
       const land = topojson.feature(topo, topo.objects.land);
       const polys = land.features.flatMap(f =>

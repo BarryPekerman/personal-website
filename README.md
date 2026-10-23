@@ -27,7 +27,8 @@ docker build -t portfolio . && docker run --rm -p 8080:8080 portfolio
 ```
 
 Edit `content/` to change what visitors see (`.motd` is the login banner),
-then restart: the files are compiled into the binary.
+then restart: the files are compiled into the binary, like `web/`. Pages put
+the commit on every static URL (`?v=`), so a deploy never serves stale JS.
 
 ## Develop
 
@@ -47,7 +48,8 @@ internal/handlers/ WebSocket <-> shell session bridge
 internal/shell/    the virtual shell
 internal/status/   /api/status: the live deployment and the visitor's route
 internal/geo/      positions for the route map (generated: go generate ./internal/geo)
-web/               front page (home.html), full-screen terminal, xterm.js client
+web/               pages (templates/) and static files, embedded in the binary;
+                   third-party libraries vendored in web/static/vendor/
 ```
 
 ## Deploy

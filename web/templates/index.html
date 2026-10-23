@@ -2,95 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>
-        // No terminal on phones (same test as the front page's phone layout):
-        // send them to the page made for them
-        if (matchMedia('(max-width: 700px), (max-height: 500px) and (pointer: coarse)').matches) location.replace('/');
-    </script>
+    <script src="/static/js/terminal-page.js?v={{.V}}"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barry Pekerman — Portfolio Terminal</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body, html {
-            height: 100%;
-            font-family: 'Courier New', monospace;
-            background: #000;
-            color: #fff;
-            overflow: hidden;
-        }
-        
-        #terminal {
-            width: 100vw;
-            height: 100vh;
-        }
-        
-        /* Help popup */
-        #help-popup {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.9);
-            border: 1px solid #333;
-            border-radius: 5px;
-            padding: 8px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            z-index: 1000;
-            transition: all 0.3s ease;
-        }
-        
-        #help-popup:hover {
-            background: rgba(0, 50, 100, 0.9);
-            border-color: #0066cc;
-        }
-        
-        #help-content {
-            display: none;
-            position: fixed;
-            top: 50px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.95);
-            border: 1px solid #333;
-            border-radius: 5px;
-            padding: 15px;
-            max-width: 300px;
-            font-size: 11px;
-            line-height: 1.4;
-            z-index: 1001;
-        }
-        
-        #help-content.show {
-            display: block;
-        }
-        
-        .help-section {
-            margin-bottom: 10px;
-        }
-        
-        .help-title {
-            color: #0066cc;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .help-command {
-            color: #00ff00;
-            font-weight: bold;
-        }
-        
-        .help-desc {
-            color: #ccc;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/vendor/xterm.css?v={{.V}}">
+    <link rel="stylesheet" href="/static/css/terminal-page.css?v={{.V}}">
 </head>
 <body>
     <!-- Help popup button -->
-    <div id="help-popup" onclick="toggleHelp()">
+    <div id="help-popup">
         ❓ Help
     </div>
     
@@ -121,28 +41,9 @@
     <!-- Full-screen terminal -->
     <div id="terminal"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
-    
-    <script>
-        function toggleHelp() {
-            const helpContent = document.getElementById('help-content');
-            helpContent.classList.toggle('show');
-        }
-        
-        // Close help when clicking outside
-        document.addEventListener('click', function(event) {
-            const helpPopup = document.getElementById('help-popup');
-            const helpContent = document.getElementById('help-content');
-            
-            if (!helpPopup.contains(event.target) && !helpContent.contains(event.target)) {
-                helpContent.classList.remove('show');
-            }
-        });
-    </script>
-    
-    <!-- Cache-busting: add timestamp to force reload -->
-    <script src="/static/js/terminal.js?v=4"></script>
+    <script src="/static/vendor/xterm.js?v={{.V}}"></script>
+    <script src="/static/vendor/addon-fit.js?v={{.V}}"></script>
+    <script src="/static/vendor/addon-web-links.js?v={{.V}}"></script>
+    <script src="/static/js/terminal.js?v={{.V}}"></script>
 </body>
 </html>
