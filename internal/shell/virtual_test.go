@@ -211,6 +211,47 @@ func TestBackspaceAndCtrlC(t *testing.T) {
 	}
 }
 
+func TestTextWidth(t *testing.T) {
+	for text, want := range map[string]int{
+		"abc":        3,
+		"日本":         4,
+		"café":       4,
+		"cafe\u0301": 4, // e + combining acute
+		"🙂":          2,
+		"":           0,
+	} {
+		if got := textWidth(text); got != want {
+			t.Errorf("textWidth(%q) = %d, want %d", text, got, want)
+		}
+	}
+}
+
+// The prompt "guest@portfolio:~$ " is 19 columns. On a 20-column terminal a
+// longer line wraps, and a redraw has to start on the prompt's row.
+func TestRedrawAfterWrap(t *testing.T) {
+	h := newHarness(t)
+	if err := h.session.Resize(20, 10); err != nil {
+		t.Fatal(err)
+	}
+	const redraw = "\r\x1b[J"
+	// 19 + "a" = 20 columns: the cursor still waits on the first row
+	h.send("a", "a")
+	if out := h.send("\x7f", "$ "); !strings.HasPrefix(out, redraw) {
+		t.Errorf("backspace on one row: %q", out)
+	}
+	// 19 + "abc" = 22: the cursor is on the second row
+	h.send("abc", "abc")
+	if out := h.send("\x7f", "ab"); !strings.HasPrefix(out, "\r\x1b[1A\x1b[J") || !strings.HasSuffix(out, "ab") {
+		t.Errorf("backspace on a wrapped line: %q", out)
+	}
+	h.send("\x15", "$ ") // Ctrl-U: 19 + "ab" = 21, second row
+	// A wide character takes two columns: 19 + 2 = 21, second row again
+	h.send("日", "日")
+	if out := h.send("\x7f", "$ "); !strings.HasPrefix(out, "\r\x1b[1A\x1b[J") {
+		t.Errorf("backspace over a wide character at the wrap: %q", out)
+	}
+}
+
 func TestTabCompletion(t *testing.T) {
 	h := newHarness(t)
 
