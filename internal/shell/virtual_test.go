@@ -1,14 +1,12 @@
 package shell
 
 import (
-	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 var testFS = fstest.MapFS{
@@ -31,8 +29,7 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
+	logger := slog.New(slog.DiscardHandler)
 
 	session, err := NewVirtualManager(testFS, logger).CreateSession("test")
 	if err != nil {

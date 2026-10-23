@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"path"
 	"runtime"
 	"sort"
@@ -14,7 +15,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/text/width"
 )
 
@@ -44,11 +44,11 @@ Type 'help' for commands.
 // read-only fs.FS, so there is no shell to escape from.
 type VirtualManager struct {
 	fsys   fs.FS
-	logger *logrus.Logger
+	logger *slog.Logger
 }
 
 // NewVirtualManager creates a virtual shell manager serving files from fsys
-func NewVirtualManager(fsys fs.FS, logger *logrus.Logger) *VirtualManager {
+func NewVirtualManager(fsys fs.FS, logger *slog.Logger) *VirtualManager {
 	return &VirtualManager{
 		fsys:   fsys,
 		logger: logger,
@@ -57,7 +57,7 @@ func NewVirtualManager(fsys fs.FS, logger *logrus.Logger) *VirtualManager {
 
 // CreateSession creates a new virtual shell session
 func (m *VirtualManager) CreateSession(sessionID string) (Session, error) {
-	m.logger.WithField("session_id", sessionID).Debug("Creating virtual shell session")
+	m.logger.Debug("Creating virtual shell session", "session_id", sessionID)
 
 	return &VirtualSession{
 		pipes: newPipes(),

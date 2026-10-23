@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"errors"
-	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 	"portfolio/internal/shell"
 )
 
@@ -24,8 +23,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 func newLimitedServer(t *testing.T, limits Limits) (*httptest.Server, *TerminalHandler) {
 	t.Helper()
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
+	logger := slog.New(slog.DiscardHandler)
 
 	fsys := fstest.MapFS{"cv.txt": {Data: []byte("CV-CONTENT\n")}}
 	handler := NewTerminalHandler(shell.NewVirtualManager(fsys, logger), logger, limits)

@@ -2,13 +2,12 @@ package main
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
-
-	"github.com/sirupsen/logrus"
 )
 
 func TestNoListing(t *testing.T) {
@@ -34,8 +33,7 @@ func TestNoListing(t *testing.T) {
 }
 
 func TestRoutes(t *testing.T) {
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
+	logger := slog.New(slog.DiscardHandler)
 	// Nothing to reach: the status reports the game as unavailable
 	h, err := newHandler(config{commit: "abc123", devVisitor: "IL/TLV", region: "il-jerusalem-1"}, logger)
 	if err != nil {

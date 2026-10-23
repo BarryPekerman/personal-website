@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 	"portfolio/internal/shell"
 )
 
@@ -60,7 +60,7 @@ type edgeMessage struct {
 // TerminalHandler handles WebSocket connections for terminal sessions
 type TerminalHandler struct {
 	shellManager shell.Manager
-	logger       *logrus.Logger
+	logger       *slog.Logger
 	upgrader     websocket.Upgrader
 	limits       Limits
 
@@ -78,7 +78,7 @@ type TerminalHandler struct {
 
 // NewTerminalHandler creates a new terminal handler with the given shell
 // manager and limits
-func NewTerminalHandler(shellManager shell.Manager, logger *logrus.Logger, limits Limits) *TerminalHandler {
+func NewTerminalHandler(shellManager shell.Manager, logger *slog.Logger, limits Limits) *TerminalHandler {
 	return &TerminalHandler{
 		shellManager: shellManager,
 		logger:       logger,
@@ -144,7 +144,7 @@ func clientAddr(r *http.Request) netip.Prefix {
 func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ws, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to upgrade connection to WebSocket")
+		h.logger.Error("Failed to upgrade connection to WebSocket", "err", err)
 		return
 	}
 	defer ws.Close() //nolint:errcheck // nothing useful to do if closing fails
@@ -153,28 +153,28 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	addr := clientAddr(r)
 	sessionID, refused := h.acquire(addr)
 	if refused != "" {
-		h.logger.WithField("addr", addr).Warn("Terminal session refused: " + refused)
+		h.logger.Warn("Terminal session refused", "reason", refused, "addr", addr.String())
 		h.closeWith(ws, websocket.CloseTryAgainLater, refused)
 		return
 	}
 	defer h.release(addr)
-	log := h.logger.WithField("session_id", sessionID)
+	log := h.logger.With("session_id", sessionID)
 	log.Info("New WebSocket connection established")
 
 	session, err := h.shellManager.CreateSession(sessionID)
 	if err != nil {
-		log.WithError(err).Error("Failed to create shell session")
+		log.Error("Failed to create shell session", "err", err)
 		h.sendError(ws, "Failed to create terminal session. Please try again.")
 		return
 	}
 	defer func() {
 		if err := session.Close(); err != nil {
-			log.WithError(err).Error("Error closing shell session")
+			log.Error("Error closing shell session", "err", err)
 		}
 	}()
 
 	if err := session.Start(); err != nil {
-		log.WithError(err).Error("Failed to start shell session")
+		log.Error("Failed to start shell session", "err", err)
 		h.sendError(ws, "Failed to start shell session.")
 		return
 	}
@@ -207,7 +207,7 @@ func (h *TerminalHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request
 // keepAlive pings the browser until done is closed, and ends the session
 // after limits.Idle without input. Closing the connection unblocks both
 // pumps. WriteControl and Close are safe to call alongside pumpOutput's writes.
-func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, done <-chan struct{}, log *logrus.Entry) {
+func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, done <-chan struct{}, log *slog.Logger) {
 	ticker := time.NewTicker(h.limits.Ping)
 	defer ticker.Stop()
 	idle := time.NewTimer(h.limits.Idle)
@@ -237,14 +237,14 @@ func (h *TerminalHandler) keepAlive(ws *websocket.Conn, input <-chan struct{}, d
 func (h *TerminalHandler) closeWith(ws *websocket.Conn, code int, reason string) {
 	msg := websocket.FormatCloseMessage(code, reason)
 	if err := ws.WriteControl(websocket.CloseMessage, msg, time.Now().Add(writeWait)); err != nil {
-		h.logger.WithError(err).Debug("Failed to send close message")
+		h.logger.Debug("Failed to send close message", "err", err)
 	}
 	_ = ws.Close()
 }
 
 // pumpInput forwards browser messages to the shell until the connection
 // closes. Each message pushes back the read deadline and the idle timer.
-func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, input chan<- struct{}, deadline func() error, log *logrus.Entry) {
+func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, input chan<- struct{}, deadline func() error, log *slog.Logger) {
 	// Closing stdin tells the shell the visitor has gone
 	defer func() {
 		if closer, ok := session.Writer().(io.Closer); ok {
@@ -256,7 +256,7 @@ func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, i
 		messageType, data, err := ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.WithError(err).Debug("WebSocket closed")
+				log.Debug("WebSocket closed", "err", err)
 			}
 			return
 		}
@@ -276,14 +276,14 @@ func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, i
 			default: // keepAlive has a reset pending already
 			}
 			if _, err := session.Writer().Write([]byte(msg.Data)); err != nil {
-				log.WithError(err).Debug("Failed to write to shell")
+				log.Debug("Failed to write to shell", "err", err)
 				return
 			}
 		case "resize":
 			var cols, rows uint16
 			if _, err := fmt.Sscanf(msg.Data, "%d,%d", &cols, &rows); err == nil {
 				if err := session.Resize(cols, rows); err != nil {
-					log.WithError(err).Debug("Failed to resize terminal")
+					log.Debug("Failed to resize terminal", "err", err)
 				}
 			}
 		}
@@ -292,7 +292,7 @@ func (h *TerminalHandler) pumpInput(ws *websocket.Conn, session shell.Session, i
 
 // pumpOutput streams shell output to the browser until the shell exits.
 // Output is sent as binary frames so ANSI sequences arrive untouched.
-func (h *TerminalHandler) pumpOutput(ws *websocket.Conn, session shell.Session, log *logrus.Entry) {
+func (h *TerminalHandler) pumpOutput(ws *websocket.Conn, session shell.Session, log *slog.Logger) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := session.Reader().Read(buf)
@@ -306,7 +306,7 @@ func (h *TerminalHandler) pumpOutput(ws *websocket.Conn, session shell.Session, 
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				log.WithError(err).Debug("Shell read error")
+				log.Debug("Shell read error", "err", err)
 			}
 			return
 		}
@@ -317,6 +317,6 @@ func (h *TerminalHandler) sendError(ws *websocket.Conn, message string) {
 	errMsg := fmt.Sprintf("\r\n\x1b[1;31mError: %s\x1b[0m\r\n", message)
 	_ = ws.SetWriteDeadline(time.Now().Add(writeWait))
 	if err := ws.WriteMessage(websocket.BinaryMessage, []byte(errMsg)); err != nil {
-		h.logger.WithError(err).Debug("Failed to send error to client")
+		h.logger.Debug("Failed to send error to client", "err", err)
 	}
 }
