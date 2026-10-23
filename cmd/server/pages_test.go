@@ -85,7 +85,7 @@ func TestSecurityHeaders(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	for header, want := range map[string]string{
-		"Content-Security-Policy":   "script-src 'self';",
+		"Content-Security-Policy":   "script-src 'self' https://static.cloudflareinsights.com;",
 		"Strict-Transport-Security": "max-age=",
 		"X-Content-Type-Options":    "nosniff",
 		"Referrer-Policy":           "strict-origin-when-cross-origin",

@@ -93,11 +93,14 @@ func (c *cacheOnSuccess) Write(b []byte) (int, error) {
 }
 
 // contentSecurityPolicy allows only this origin's own scripts, styles,
-// requests (the WebSocket included) and images, and no framing. Styles need
-// 'unsafe-inline' because xterm.js themes the terminal by adding <style>
-// elements; scripts don't, as the pages have no inline script.
-const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+// requests (the WebSocket included) and images, and no framing. The one
+// exception is Cloudflare Web Analytics: Cloudflare adds its beacon script to
+// every page at the edge, and the beacon reports to cloudflareinsights.com.
+// Styles need 'unsafe-inline' because xterm.js themes the terminal by adding
+// <style> elements; scripts don't, as the pages have no inline script.
+const contentSecurityPolicy = "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; " +
+	"style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; " +
+	"object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 // securityHeaders sets the headers every response carries
 func securityHeaders(h http.Handler) http.Handler {
