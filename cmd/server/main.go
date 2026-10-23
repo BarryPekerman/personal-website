@@ -30,6 +30,7 @@ func main() {
 
 	// The shell is simulated: nothing a visitor types runs anywhere
 	shellManager := shell.NewVirtualManager(content.FS, logger)
+	terminal := terminalHandlers.NewTerminalHandler(shellManager, logger, terminalHandlers.DefaultLimits)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", noListing(http.FileServer(http.Dir("web/static")))))
@@ -62,7 +63,7 @@ func main() {
 	}
 	// TUNNEL_METRICS_URL is cloudflared's /metrics in the cluster (unset
 	// locally: the map then shows no tunnel connections)
-	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminalHandlers.ActiveSessions, status.Sources{
+	mux.Handle("GET /api/status", status.NewHandler(statusInfo, terminal.ActiveSessions, status.Sources{
 		HandoverHealthz: handoverURL,
 		TunnelMetrics:   os.Getenv("TUNNEL_METRICS_URL"),
 		TTL:             30 * time.Second,
@@ -70,7 +71,7 @@ func main() {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("GET /ws", terminalHandlers.NewTerminalHandler(shellManager, logger).HandleWebSocket)
+	mux.HandleFunc("GET /ws", terminal.HandleWebSocket)
 
 	addr := ":8080"
 	if port := os.Getenv("PORT"); port != "" {
