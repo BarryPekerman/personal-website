@@ -55,6 +55,7 @@ func TestRoutes(t *testing.T) {
 		{"/static/vendor/land-110m.json", `"land"`, http.StatusOK},
 		{"/api/content/projects/the-handover.md", "the-handover", http.StatusOK},
 		{"/api/status", `"commit":"abc123"`, http.StatusOK},
+		{"/api/projects", `{"file":"the-handover.md","name":"the-handover","link":"https://play.barrypekerman.com","label":"live"`, http.StatusOK},
 		{"/api/status", `"label":"TLV"`, http.StatusOK},
 		{"/static/", "", http.StatusNotFound},
 		{"/api/content/", "", http.StatusNotFound},

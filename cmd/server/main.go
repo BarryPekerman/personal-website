@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -141,6 +142,19 @@ func newHandler(c config, logger *logrus.Logger) (http.Handler, error) {
 	// The same files the terminal shows, read-only, for the phone layout
 	// (which renders them as text instead of opening a terminal)
 	mux.Handle("GET /api/content/", http.StripPrefix("/api/content/", noListing(http.FileServerFS(content.FS))))
+	// The project list, built from the write-ups in content/projects
+	projects, err := content.Projects(content.FS)
+	if err != nil {
+		return nil, err
+	}
+	projectsJSON, err := json.Marshal(projects)
+	if err != nil {
+		return nil, err
+	}
+	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(projectsJSON)
+	})
 	mux.Handle("GET /api/status", statusHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
