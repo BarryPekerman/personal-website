@@ -14,11 +14,8 @@
 !internal/geo/
 !internal/geo/gen/
 !internal/handlers/
-!internal/k8s/
 !internal/shell/
 !internal/status/
-!manifests/
-!manifests/docker/
 !web/
 !web/static/
 !web/static/js/
@@ -46,10 +43,7 @@
 !internal/geo/gen/main.go
 !internal/handlers/terminal.go
 !internal/handlers/terminal_test.go
-!internal/k8s/client.go
 !internal/shell/interface.go
-!internal/shell/k8s.go
-!internal/shell/local.go
 !internal/shell/pipes.go
 !internal/shell/virtual.go
 !internal/shell/virtual_test.go
@@ -57,10 +51,7 @@
 !internal/status/status_test.go
 
 # What visitors browse in the terminal (embedded in the binary)
-!content/.bash_history
-!content/.bashrc
 !content/.motd
-!content/.profile
 !content/contact_info.md
 !content/content.go
 !content/cv.txt
@@ -76,11 +67,6 @@
 !web/static/js/terminal.js
 !web/templates/home.html
 !web/templates/index.html
-
-# k8s mode's guest image
-!manifests/docker/Dockerfile.guest
-!manifests/docker/guest-bashrc
-!manifests/docker/guest-profile
 
 # Docs
 !docs/NOTES.md

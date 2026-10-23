@@ -7,8 +7,9 @@ Working notes and decisions. Last updated 2026-10-20.
 ## What this project is
 
 A portfolio site styled after *Uplink*: visitors explore my CV and projects
-in a terminal in the browser. v1 is a simulated shell, so nothing a visitor
-types runs anywhere. v2 adds a real shell in an isolated pod per visitor.
+in a terminal in the browser. The shell is simulated, so nothing a visitor
+types runs anywhere. The real, isolated shell is The Handover
+(play.barrypekerman.com), which the site links to.
 
 ## Decisions so far
 
@@ -18,8 +19,11 @@ types runs anywhere. v2 adds a real shell in an isolated pod per visitor.
   and blocklists can be bypassed anyway. Isolation is the only real defense.
 - **No fabricated content.** The old placeholder CV ("Senior Engineer,
   Stanford") is gone. Everything in `content/` must be true.
-- **Go stays** (not a static JS site). The shell backends share one `Session`
-  interface, so v2 is a backend swap, not a rewrite.
+- **Go stays** (not a static JS site): the server owns the shell and serves the
+  live status.
+- **No real shell here** (2026-10-23): the `local` and `k8s` backends,
+  `connect sandbox` and the guest image are deleted. A real bash was one env
+  var away in the production image; The Handover is the real shell.
 
 ## Real BusyBox: options considered
 
@@ -32,8 +36,6 @@ types runs anywhere. v2 adds a real shell in an isolated pod per visitor.
 | A. BusyBox pod per visitor | my k3s cluster | **v2.** Needs gVisor, per-IP rate limits, quotas, idle timeout, warm pod pool |
 | B. BusyBox in the browser (WASM / v86) | visitor's machine | Zero risk, but heavy download and mostly frontend work |
 | C. One shared container | one pod | No: visitors would interfere with each other |
-
-`connect sandbox` exists as a placeholder; it goes away (see below).
 
 ## Who visits and what they need
 
@@ -108,5 +110,5 @@ site with it.
 5. [x] Real data: game seats from `/healthz`; pod/node/commit/uptime; route from Cloudflare headers and the tunnel's connections
 6. [x] Deploy to OKE via ArgoCD (`oke-gitops` `portfolio/`; the stale `k8s/` and `argocd/` manifests are deleted)
 7. [x] Uplink styling, music/sfx toggles
-8. [ ] Remove k8s mode and `connect sandbox` (The Handover is the real shell)
+8. [x] Remove k8s mode and `connect sandbox` (The Handover is the real shell)
 9. [x] Make the repo public

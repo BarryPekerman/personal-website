@@ -137,11 +137,6 @@ func (s *VirtualSession) Close() error {
 	return nil
 }
 
-// Mode returns the session mode
-func (s *VirtualSession) Mode() string {
-	return "virtual"
-}
-
 func (s *VirtualSession) run() error {
 	// Closing output gives the handler EOF, which ends the connection
 	defer func() { _ = s.outW.Close() }()
@@ -427,10 +422,6 @@ func (s *VirtualSession) cmdConnect(args []string) {
 	}
 	s.print("\n")
 
-	if host == "sandbox" {
-		s.print(fmt.Sprintf("%sSandbox offline.%s Real isolated shells are under construction - check back soon.\n", colorYellow, colorReset))
-		return
-	}
 	if url, ok := knownHosts[host]; ok {
 		s.print(fmt.Sprintf("%sConnected.%s %s\n", colorGreen, colorReset, url))
 		return
