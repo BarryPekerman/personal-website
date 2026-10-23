@@ -1,13 +1,10 @@
 // Front page: projects, boot animation, clock, live status and the phone
 // layout. Loaded after terminal.js, audio.js and routemap.js.
-// ---------- projects: the files in content/projects, with their public repos ----------
-const SYSTEMS = [
-  { file: 'the-handover.md',          name: 'the-handover',          link: 'https://play.barrypekerman.com/', label: 'live' },
-  { file: 'oke-version-guard.md',     name: 'oke-version-guard',     link: 'https://github.com/BarryPekerman/oke-version-guard', label: 'repo' },
-  { file: 'terraform-aws-chatops.md', name: 'terraform-aws-chatops', link: 'https://github.com/BarryPekerman/terraform-aws-chatops', label: 'repo' },
-  { file: 'k8s-cluster-vagrant.md',   name: 'k8s-cluster-vagrant',   link: 'https://github.com/BarryPekerman/K8s-Cluster-Vagrant', label: 'repo' },
-  { file: 'portfolio-terminal.md',    name: 'portfolio-terminal',    link: 'https://github.com/BarryPekerman/personal-website', label: 'repo' },
-];
+// ---------- projects: the write-ups in content/projects, listed by /api/projects ----------
+const projectsReady = fetch('/api/projects').then(r => {
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+});
 
 const $ = id => document.getElementById(id);
 
@@ -54,27 +51,32 @@ document.addEventListener('click', e => {
 });
 
 const sysBox = document.getElementById('systems');
-document.getElementById('sys-count').textContent = SYSTEMS.length;
-SYSTEMS.forEach(s => {
-  const d = document.createElement('div');
-  d.className = 'sys';
-  const name = document.createElement('div');
-  name.className = 'name'; name.textContent = s.name;
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  const open = document.createElement('span'); open.textContent = 'OPEN';
-  const a = document.createElement('a');
-  a.href = s.link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = s.label + ' ↗';
-  a.onclick = e => e.stopPropagation();
-  meta.append(open, a);
-  d.append(name, meta);
-  d.onclick = () => {
-    sysBox.querySelectorAll('.sys').forEach(x => x.classList.toggle('active', x === d));
-    Sfx.connected();
-    if (terminal) terminal.run('cat ~/projects/' + s.file);
-  };
-  sysBox.appendChild(d);
-});
+projectsReady.then(list => {
+  document.getElementById('sys-count').textContent = list.length;
+  list.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'sys';
+    const name = document.createElement('div');
+    name.className = 'name'; name.textContent = s.name;
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const open = document.createElement('span'); open.textContent = 'OPEN';
+    meta.append(open);
+    if (s.link) {
+      const a = document.createElement('a');
+      a.href = s.link; a.target = '_blank'; a.rel = 'noopener'; a.textContent = s.label + ' ↗';
+      a.onclick = e => e.stopPropagation();
+      meta.append(a);
+    }
+    d.append(name, meta);
+    d.onclick = () => {
+      sysBox.querySelectorAll('.sys').forEach(x => x.classList.toggle('active', x === d));
+      Sfx.connected();
+      if (terminal) terminal.run('cat ~/projects/' + s.file);
+    };
+    sysBox.appendChild(d);
+  });
+}).catch(() => { sysBox.textContent = 'could not load the projects'; });
 
 // ---------- boot: password breaker ----------
 const NAME = 'BARRY PEKERMAN';
@@ -254,43 +256,31 @@ function renderText(text, box) {
   }
 }
 
-// gist is a write-up's first paragraph: under the title and its link
-function gist(text) {
-  const out = [];
-  for (const l of text.split('\n').slice(1)) {
-    const t = l.trim();
-    if (!t || /^https?:\/\//.test(t)) { if (out.length) break; continue; }
-    out.push(t);
-  }
-  return out.join(' ');
-}
-
-SYSTEMS.forEach(async s => {
+projectsReady.then(list => list.forEach(async s => {
   const d = document.createElement('details');
   const sum = document.createElement('summary');
   const name = document.createElement('div'); name.className = 'name'; name.textContent = s.name;
-  const g = document.createElement('div'); g.className = 'gist';
+  const g = document.createElement('div'); g.className = 'gist'; g.textContent = s.gist;
   sum.append(name, g);
   const body = document.createElement('div'); body.className = 'text';
   d.append(sum, body);
   $('p-projects').append(d);
   try {
-    const text = await contentText('projects/' + s.file);
-    g.textContent = gist(text);
-    renderText(text, body);
+    renderText(await contentText('projects/' + s.file), body);
   } catch (e) {
-    g.textContent = 'could not load this write-up';
+    body.textContent = 'could not load this write-up';
   }
-});
+})).catch(() => { $('p-projects').textContent = 'could not load the projects'; });
 
+// the CV (without its first lines, the name and title the page shows above)
+// and how to reach me, from the same files as the terminal's cv and contact
 (async () => {
   const box = $('p-cv-text');
   try {
-    const p = document.createElement('p');
-    p.textContent = 'The full CV is on its way. Until then, the projects above are the best summary of my work.';
-    box.append(p);
+    const cv = await contentText('cv.txt');
+    renderText(cv.replace(/\r/g, '').split(/\n\s*\n/).slice(1).join('\n\n'), box);
     renderText(await contentText('contact_info.md'), box);
-  } catch (e) { /* the summary line still says the CV is coming */ }
+  } catch (e) { box.textContent = 'could not load the CV'; }
 })();
 $('p-cv-btn').addEventListener('click', () => {
   $('p-cv').open = true;

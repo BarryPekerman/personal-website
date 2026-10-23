@@ -2,7 +2,5 @@ BARRY PEKERMAN
 DevOps Engineer · Israel
 github.com/BarryPekerman
 
-The full CV is on its way. Until then:
-
-  projects       what I have built (start here)
-  cat contact_info.md   how to reach me
+The full CV is on its way. Until then, my projects are the best summary of
+my work.

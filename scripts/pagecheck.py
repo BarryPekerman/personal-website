@@ -56,6 +56,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(2500)  # the boot animation
     check("desktop: no session before the visitor types", len(sockets) == 0)
     check("desktop: terminal shows how to start", "Press any key" in terminal_text(page))
+    check("desktop: projects listed", page.locator("#systems .sys").count() >= 5)
     check("desktop: map draws the land", page.locator("#map circle").count() > 100)
     check("desktop: status panel live", page.locator("#live").inner_text().endswith("LIVE"))
     page.screenshot(path=f"{out}/desktop-before.png")
@@ -117,6 +118,9 @@ with sync_playwright() as p:
     check("phone: desktop layout hidden", not page.locator(".app").is_visible())
     gists = page.locator("#p-projects .gist").all_text_contents()
     check("phone: every project's summary loaded", len(gists) >= 5 and all(g and "could not load" not in g for g in gists))
+    page.click("#p-cv-btn")
+    cv = page.locator("#p-cv-text").inner_text()
+    check("phone: CV and contact from content/", "projects" in cv and "github.com/BarryPekerman" in cv and "BARRY PEKERMAN" not in cv)
     check("phone: nothing wider than the screen", not page.evaluate("document.documentElement.scrollWidth > innerWidth"))
     page.screenshot(path=f"{out}/phone.png", full_page=True)
     page.goto(base + "/terminal")

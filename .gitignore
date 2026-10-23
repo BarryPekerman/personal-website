@@ -63,6 +63,7 @@
 !content/.motd
 !content/contact_info.md
 !content/content.go
+!content/content_test.go
 !content/cv.txt
 !content/projects/k8s-cluster-vagrant.md
 !content/projects/oke-version-guard.md
