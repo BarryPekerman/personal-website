@@ -30,6 +30,14 @@ Edit `content/` to change what visitors see (`.motd` is the login banner),
 then restart: the files are compiled into the binary, like `web/`. Pages put
 the commit on every static URL (`?v=`), so a deploy never serves stale JS.
 
+## Metrics
+
+Prometheus metrics are on a separate port, `:9090/metrics` (`METRICS_ADDR`),
+which the Cloudflare tunnel doesn't reach: terminal sessions (open, started,
+refused by limit, ended by reason, setup errors), HTTP requests and latency
+per route, failed reads of the status sources, and the Go runtime. Logs are
+JSON on stdout (`log/slog`; `LOG_LEVEL=debug` for more).
+
 ## Develop
 
 ```bash

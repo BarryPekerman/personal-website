@@ -21,5 +21,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/portfolio ./portfolio
 
-EXPOSE 8080
+# 8080: the site; 9090: /metrics (Prometheus only, not behind the tunnel)
+EXPOSE 8080 9090
 ENTRYPOINT ["/app/portfolio"]

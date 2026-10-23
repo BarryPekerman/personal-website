@@ -41,6 +41,7 @@
 # Server
 !cmd/server/main.go
 !cmd/server/main_test.go
+!cmd/server/metrics.go
 !cmd/server/pages.go
 !cmd/server/pages_test.go
 !internal/geo/geo.go

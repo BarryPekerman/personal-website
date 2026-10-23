@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func get(t *testing.T, h http.Handler, headers map[string]string) response {
@@ -77,7 +79,11 @@ func TestStatusWithoutCloudflareOrGame(t *testing.T) {
 	}))
 	defer game.Close()
 
+	before := testutil.ToFloat64(upstreamErrors.WithLabelValues("handover"))
 	r := get(t, NewHandler(Info{}, func() int64 { return 0 }, Sources{HandoverHealthz: game.URL, TTL: time.Minute}), nil)
+	if n := testutil.ToFloat64(upstreamErrors.WithLabelValues("handover")) - before; n != 1 {
+		t.Errorf("failed game read counted %v times, want 1", n)
+	}
 	if r.Visitor != (Visitor{}) {
 		t.Errorf("visitor without Cloudflare headers: %+v", r.Visitor)
 	}

@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestNoListing(t *testing.T) {
@@ -35,7 +38,7 @@ func TestNoListing(t *testing.T) {
 func TestRoutes(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	// Nothing to reach: the status reports the game as unavailable
-	h, err := newHandler(config{commit: "abc123", devVisitor: "IL/TLV", region: "il-jerusalem-1"}, logger)
+	h, err := newHandler(config{commit: "abc123", devVisitor: "IL/TLV", region: "il-jerusalem-1"}, logger, prometheus.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,5 +95,49 @@ func TestConfigFromEnv(t *testing.T) {
 	c := configFromEnv()
 	if c.pod != "portfolio-abc" || c.handoverURL != "https://play.barrypekerman.com/healthz" {
 		t.Errorf("config: %+v", c)
+	}
+}
+
+func TestMetrics(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	reg := prometheus.NewRegistry()
+	h, err := newHandler(config{commit: "abc"}, logger, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	for range 3 {
+		resp, err := http.Get(srv.URL + "/api/projects")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+	}
+
+	if n := testutil.ToFloat64(httpRequests.WithLabelValues("projects", "200")); n < 3 {
+		t.Errorf("projects requests counted: %v", n)
+	}
+	if n, err := testutil.GatherAndCount(reg, "portfolio_terminal_sessions"); err != nil || n != 1 {
+		t.Errorf("open sessions gauge: %d, %v", n, err)
+	}
+
+	// /metrics is on its own handler, not the site's
+	rec := httptest.NewRecorder()
+	metricsHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := rec.Body.String()
+	for _, name := range []string{"portfolio_http_requests_total", "portfolio_terminal_sessions_started_total",
+		"portfolio_terminal_sessions_refused_total", "portfolio_status_upstream_errors_total", "go_goroutines"} {
+		if !strings.Contains(body, name) {
+			t.Errorf("/metrics has no %s", name)
+		}
+	}
+	resp, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("the site serves /metrics: %d", resp.StatusCode)
 	}
 }

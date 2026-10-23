@@ -15,8 +15,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"portfolio/internal/geo"
 )
+
+// upstreamErrors counts failed reads of the status sources, served on /metrics
+var upstreamErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "portfolio_status_upstream_errors_total",
+	Help: "Failed reads of a status source: handover (the game's /healthz) or tunnel (cloudflared's /metrics).",
+}, []string{"source"})
+
+func init() {
+	upstreamErrors.WithLabelValues("handover")
+	upstreamErrors.WithLabelValues("tunnel")
+}
 
 // Info is fixed for the life of the process
 type Info struct {
@@ -94,8 +107,8 @@ func NewHandler(info Info, sessions func() int64, src Sources) *Handler {
 	return &Handler{
 		info:     info,
 		sessions: sessions,
-		seats:    &cache[*Seats]{url: src.HandoverHealthz, ttl: src.TTL, client: client, parse: parseSeats},
-		tunnel:   &cache[[]TunnelLink]{url: src.TunnelMetrics, ttl: src.TTL, client: client, parse: parseTunnel},
+		seats:    &cache[*Seats]{name: "handover", url: src.HandoverHealthz, ttl: src.TTL, client: client, parse: parseSeats},
+		tunnel:   &cache[[]TunnelLink]{name: "tunnel", url: src.TunnelMetrics, ttl: src.TTL, client: client, parse: parseTunnel},
 	}
 }
 
@@ -192,6 +205,7 @@ func visitorFrom(r *http.Request) Visitor {
 
 // cache remembers the last answer (or failure, as T's zero value) for ttl
 type cache[T any] struct {
+	name   string // the source, for the error metric
 	url    string
 	ttl    time.Duration
 	client *http.Client
@@ -213,32 +227,32 @@ func (c *cache[T]) get(ctx context.Context) T {
 		return c.val
 	}
 	c.fetched = time.Now()
-	c.val = c.fetch(ctx)
+	var ok bool
+	if c.val, ok = c.fetch(ctx); !ok {
+		upstreamErrors.WithLabelValues(c.name).Inc()
+	}
 	return c.val
 }
 
-func (c *cache[T]) fetch(ctx context.Context) T {
+// fetch reads and parses the source; false when either fails
+func (c *cache[T]) fetch(ctx context.Context) (T, bool) {
 	var zero T
 	// not the visitor's context: a closed tab shouldn't cache a failure
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
-		return zero
+		return zero, false
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return zero
+		return zero, false
 	}
 	defer resp.Body.Close() //nolint:errcheck // read-only body
 	if resp.StatusCode != http.StatusOK {
-		return zero
+		return zero, false
 	}
-	v, ok := c.parse(io.LimitReader(resp.Body, 1<<20))
-	if !ok {
-		return zero
-	}
-	return v
+	return c.parse(io.LimitReader(resp.Body, 1<<20))
 }
 
 func parseSeats(r io.Reader) (*Seats, bool) {
