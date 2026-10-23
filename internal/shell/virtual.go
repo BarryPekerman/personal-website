@@ -10,9 +10,12 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/text/width"
 )
 
 const (
@@ -76,6 +79,10 @@ type VirtualSession struct {
 	history []string
 	histPos int
 
+	// cols is the terminal width the browser reports (80 until it does), for
+	// redrawing a line that wrapped. Resize sets it from the handler's goroutine.
+	cols atomic.Int32
+
 	done chan error
 }
 
@@ -122,9 +129,20 @@ func (s *VirtualSession) Start() error {
 	return nil
 }
 
-// Resize is a no-op: output is plain text that the browser terminal wraps
-func (s *VirtualSession) Resize(_, _ uint16) error {
+// Resize records the terminal's width. Output is plain text that the browser
+// wraps; only line editing needs to know where a long line wrapped.
+func (s *VirtualSession) Resize(cols, _ uint16) error {
+	if cols > 0 {
+		s.cols.Store(int32(cols))
+	}
 	return nil
+}
+
+func (s *VirtualSession) width() int {
+	if c := s.cols.Load(); c > 0 {
+		return int(c)
+	}
+	return 80
 }
 
 // Wait blocks until the session ends
@@ -176,8 +194,9 @@ func (s *VirtualSession) handleKey(r rune, in *bufio.Reader) bool {
 		s.prompt()
 	case r == 0x7f || r == '\b':
 		if len(s.line) > 0 {
+			shown := s.shownWidth()
 			s.line = s.line[:len(s.line)-1]
-			s.print("\b \b")
+			s.redrawLine(shown)
 		}
 	case r == 0x03: // Ctrl-C
 		s.print("^C\n")
@@ -613,8 +632,44 @@ func (s *VirtualSession) historyDown() {
 
 // replaceLine swaps the current input line for text and redraws it
 func (s *VirtualSession) replaceLine(text string) {
+	shown := s.shownWidth()
 	s.line = []rune(text)
-	s.print("\r\x1b[K" + s.promptString() + text)
+	s.redrawLine(shown)
+}
+
+// redrawLine rewrites the prompt and the input line. A long line wraps onto
+// more rows and \r only reaches the start of the cursor's row, so it first
+// moves up to the row the prompt starts on. shown is how many columns the
+// prompt and the line took before the edit; the cursor is at their end, and
+// when that is an exact multiple of the width it still waits on the last
+// column of the row (it wraps only with the next character).
+func (s *VirtualSession) redrawLine(shown int) {
+	up := ""
+	if row := (shown - 1) / s.width(); shown > 0 && row > 0 {
+		up = fmt.Sprintf("\x1b[%dA", row)
+	}
+	s.print("\r" + up + "\x1b[J" + s.promptString() + string(s.line))
+}
+
+// shownWidth is how many columns the prompt and the input line take
+func (s *VirtualSession) shownWidth() int {
+	return textWidth(s.promptText()) + textWidth(string(s.line))
+}
+
+// textWidth is how many columns text takes in a terminal: two for wide
+// (East Asian, most emoji) characters, none for combining marks
+func textWidth(text string) int {
+	n := 0
+	for _, r := range text {
+		switch {
+		case unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf):
+		case width.LookupRune(r).Kind() == width.EastAsianWide || width.LookupRune(r).Kind() == width.EastAsianFullwidth:
+			n += 2
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // resolve maps a user-supplied path to a path inside fsys. It returns false
@@ -648,12 +703,20 @@ func absPath(rel string) string {
 	return path.Join(homeDir, rel)
 }
 
-func (s *VirtualSession) promptString() string {
-	dir := "~"
+func (s *VirtualSession) promptDir() string {
 	if s.cwd != "." {
-		dir = "~/" + s.cwd
+		return "~/" + s.cwd
 	}
-	return fmt.Sprintf("%sguest@portfolio%s:%s%s%s$ ", colorGreen, colorReset, colorBlue, dir, colorReset)
+	return "~"
+}
+
+func (s *VirtualSession) promptString() string {
+	return fmt.Sprintf("%sguest@portfolio%s:%s%s%s$ ", colorGreen, colorReset, colorBlue, s.promptDir(), colorReset)
+}
+
+// promptText is the prompt without its colours, as it shows on screen
+func (s *VirtualSession) promptText() string {
+	return "guest@portfolio:" + s.promptDir() + "$ "
 }
 
 func (s *VirtualSession) prompt() {
