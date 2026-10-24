@@ -38,6 +38,11 @@ func TestPagesUseAssetVersion(t *testing.T) {
 		if regexp.MustCompile(`\son[a-z]+=`).MatchString(body) || strings.Contains(body, "https://cdn.") {
 			t.Errorf("%s: inline handler or CDN reference", name)
 		}
+		// Cloudflare's email obfuscation rewrites any address into an
+		// "[email protected]" link, and html/template drops <!--email_off-->
+		if m := regexp.MustCompile(`[\w.+-]+@[\w-]+\.[a-z]{2,}`).FindString(body); m != "" {
+			t.Errorf("%s: email address %q, Cloudflare would mangle it", name, m)
+		}
 	}
 
 	dev, err := newPages("dev", noVisitor)
